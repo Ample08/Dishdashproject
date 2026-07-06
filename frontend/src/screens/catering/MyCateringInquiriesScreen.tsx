@@ -1,0 +1,130 @@
+import React from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
+import {CateringButton} from '../../components/catering/CateringButton';
+import {InquiryCard} from '../../components/catering/InquiryCard';
+import {useCatering} from '../../state/CateringContext';
+import type {RootStackScreenProps} from '../../navigation/types';
+import {colors, fontFamily} from '../../theme';
+
+/**
+ * UA5 · My Catering Inquiries. Scrollable list of inquiry cards with a count
+ * header, a support prompt, and a "Back to Home" action pinned at the bottom.
+ */
+export function MyCateringInquiriesScreen({
+  navigation,
+}: RootStackScreenProps<'MyCateringInquiries'>) {
+  const insets = useSafeAreaInsets();
+  const {inquiries} = useCatering();
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Header */}
+      <View style={[styles.header, {paddingTop: insets.top + 6}]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={12}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
+          <Icon name="arrow-back" size={22} color={colors.brand.navy} />
+        </Pressable>
+        <Text style={styles.title}>My Inquiries</Text>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}>
+        <Text style={styles.count}>
+          {inquiries.length} {inquiries.length === 1 ? 'INQUIRY' : 'INQUIRIES'}
+        </Text>
+
+        <View style={styles.list}>
+          {inquiries.map(inq => (
+            <InquiryCard key={inq.id} inquiry={inq} />
+          ))}
+        </View>
+
+        <View style={styles.supportRow}>
+          <Text style={styles.supportText}>Need help with an inquiry?</Text>
+          <Pressable accessibilityRole="button" hitSlop={6}>
+            <Text style={styles.supportLink}>Contact Support →</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.ctaBar, {paddingBottom: insets.bottom + 12}]}>
+        <CateringButton
+          label="Back to Home"
+          onPress={() =>
+            navigation.reset({index: 0, routes: [{name: 'MainTabs'}]})
+          }
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {flex: 1, backgroundColor: colors.brand.ivory},
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  back: {justifyContent: 'center'},
+  title: {
+    fontFamily: fontFamily.displayBold,
+    fontSize: 22,
+    color: colors.brand.navy,
+  },
+  scroll: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  count: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 11,
+    letterSpacing: 1.32,
+    color: colors.brand.umabdallah,
+    marginBottom: 14,
+  },
+  list: {gap: 14},
+  supportRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 22,
+  },
+  supportText: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 13,
+    color: colors.text.secondary,
+  },
+  supportLink: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 13,
+    color: colors.brand.umabdallah,
+  },
+  ctaBar: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: colors.brand.ivory,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(28,35,48,0.06)',
+  },
+});
