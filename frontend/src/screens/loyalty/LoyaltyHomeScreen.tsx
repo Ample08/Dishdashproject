@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { BottomSheet } from '../../components/BottomSheet';
 import { AuroraBackground } from '../../components/loyalty/AuroraBackground';
 import { CoachMark } from '../../components/loyalty/CoachMark';
 import { EarnMarquee } from '../../components/loyalty/EarnMarquee';
@@ -16,12 +17,14 @@ import { ExperienceCard } from '../../components/loyalty/ExperienceCard';
 import { LoyaltyStatusStrip } from '../../components/loyalty/LoyaltyStatusStrip';
 import { ProgressRing } from '../../components/loyalty/ProgressRing';
 import { TierPerkPill } from '../../components/loyalty/TierPerkPill';
-import { VoucherRailCard } from '../../components/loyalty/Voucher';
+import { VoucherCard, VoucherRailCard } from '../../components/loyalty/Voucher';
 import {
   EXPERIENCES,
   LOYALTY_BOOKINGS,
+  REDEEM_STEPS,
   TIERS,
   loyaltyColors,
+  type Voucher,
 } from '../../data/loyalty';
 import type { TabScreenProps } from '../../navigation/types';
 import { useLoyalty } from '../../state/LoyaltyContext';
@@ -33,18 +36,23 @@ import { colors, fontFamily } from '../../theme';
  */
 export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
   const insets = useSafeAreaInsets();
-  const { points, tier, next, progress, vouchers, coachSeen, dismissCoach } =
+  const { points, tier, next, vouchers, coachSeen, dismissCoach } =
     useLoyalty();
   const [stripOpen, setStripOpen] = useState(true);
+  const [welcomeVoucher, setWelcomeVoucher] = useState<Voucher | null>(null);
+
+  // Strip only surfaces upcoming bookings (past ones live in My Bookings · Past).
+  const upcomingBookings = LOYALTY_BOOKINGS.filter(b => !b.past);
 
   const subtitle = next
     ? `${(next.min - points).toLocaleString()} pts to ${next.name}`
     : 'Maximum Flavor Unlocked';
+  const ringProgress = next ? Math.min(1, points / next.min) : 1;
 
-  const goVoucher = (id: string, kind: string) =>
-    kind === 'celebration'
+  const goVoucher = (voucher: Voucher) =>
+    voucher.kind === 'celebration'
       ? navigation.navigate('GenerateCelebration')
-      : navigation.navigate('WelcomeReveal', { voucherId: id });
+      : setWelcomeVoucher(voucher);
 
   return (
     <View style={styles.root}>
@@ -85,13 +93,13 @@ export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
           <ProgressRing
             points={points}
             tier={tier}
-            progress={progress}
+            progress={ringProgress}
             subtitle={subtitle}
           />
         </Pressable>
 
         <View style={styles.perkWrap}>
-          <TierStepper activeKey={tier.key} />
+          <TierStepper activeKey={tier.key} points={points} />
           <TierPerkPill
             label={`${tier.perk ?? '5% OFF'} every dine-in - auto-applied`}
           />
@@ -108,13 +116,15 @@ export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.voucherRail}
         >
-          {vouchers.map(voucher => (
-            <VoucherRailCard
-              key={voucher.id}
-              voucher={voucher}
-              onPress={() => goVoucher(voucher.id, voucher.kind)}
-            />
-          ))}
+          {vouchers
+            .filter(voucher => voucher.status !== 'used')
+            .map(voucher => (
+              <VoucherRailCard
+                key={voucher.id}
+                voucher={voucher}
+                onPress={() => goVoucher(voucher)}
+              />
+            ))}
         </ScrollView>
 
         <View style={[styles.sectionHead, { marginTop: 24 }]}>
@@ -144,16 +154,16 @@ export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
             <View style={styles.endLine} />
           </View>
           <Text style={styles.endTitle}>You've reached the end</Text>
-          <Text style={styles.endSub}>Made with love by DishDash Group</Text>
+          <Text style={styles.endSub}>Made with ❤️ love by DishDash Group</Text>
         </View>
       </ScrollView>
 
-      {stripOpen && (
+      {stripOpen && upcomingBookings.length > 0 && (
         <View style={[styles.strip, { bottom: 0 }]}>
           <LoyaltyStatusStrip
-            title={LOYALTY_BOOKINGS[0].title}
-            subtitle={LOYALTY_BOOKINGS[0].dateLabel}
-            items={LOYALTY_BOOKINGS.map(booking => ({
+            title={upcomingBookings[0].title}
+            subtitle={upcomingBookings[0].dateLabel}
+            items={upcomingBookings.map(booking => ({
               title: booking.title,
               subtitle: booking.dateLabel,
             }))}
@@ -170,6 +180,41 @@ export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
           onDismiss={dismissCoach}
         />
       )}
+
+      <BottomSheet
+        visible={welcomeVoucher !== null}
+        onClose={() => setWelcomeVoucher(null)}
+        enterDuration={300}
+        exitDuration={300}
+        sheetStyle={styles.voucherSheet}>
+        {welcomeVoucher ? (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.voucherSheetScroll}>
+            <VoucherCard
+              voucher={welcomeVoucher}
+              initiallyRevealed
+              notchColor={loyaltyColors.bgTop}
+            />
+
+            <Text style={styles.sheetTitle}>How to Redeem</Text>
+            <Text style={styles.sheetSub}>
+              Show your code to staff at the restaurant
+            </Text>
+
+            <View style={styles.steps}>
+              {REDEEM_STEPS.map((s, i) => (
+                <View key={i} style={styles.step}>
+                  <View style={styles.num}>
+                    <Text style={styles.numText}>{i + 1}</Text>
+                  </View>
+                  <Text style={styles.stepText}>{s}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
@@ -191,11 +236,19 @@ function HeaderChip({
   );
 }
 
-function TierStepper({ activeKey }: { activeKey: string }) {
+function TierStepper({
+  activeKey,
+  points,
+}: {
+  activeKey: string;
+  points: number;
+}) {
   const activeIndex = Math.max(
     0,
     TIERS.findIndex(item => item.key === activeKey),
   );
+  const next = TIERS[activeIndex + 1];
+  const currentFill = next ? Math.min(1, Math.max(0.08, points / next.min)) : 1;
 
   return (
     <View style={styles.tierSteps}>
@@ -204,11 +257,30 @@ function TierStepper({ activeKey }: { activeKey: string }) {
           key={item.key}
           style={[
             styles.tierStep,
-            index <= activeIndex && styles.tierStepActive,
+            { borderColor: item.color },
+            index < activeIndex && styles.tierStepActive,
+            index < activeIndex && styles.tierStepCompleted,
             index === activeIndex && styles.tierStepCurrent,
           ]}
         >
-          <Text style={styles.tierStepText}>{index + 1}</Text>
+          {index === activeIndex ? (
+            <View
+              style={[
+                styles.tierStepPartial,
+                {
+                  backgroundColor: item.color,
+                  height: `${currentFill * 100}%`,
+                },
+              ]}
+            />
+          ) : null}
+          <Text
+            style={[
+              styles.tierStepText,
+              index > activeIndex && styles.tierStepTextFuture,
+            ]}>
+            {index + 1}
+          </Text>
         </View>
       ))}
     </View>
@@ -222,7 +294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 8,
+   
   },
   brand: {
     fontFamily: fontFamily.displayBlack,
@@ -261,13 +333,17 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e5b870',
-    borderRadius: 1,
-    opacity: 0.9,
+    backgroundColor: '#E4B86B',
+    borderWidth: 0,
+    borderRadius: 0,
+    opacity: 1,
+    overflow: 'hidden',
   },
   tierStepActive: {
-    backgroundColor: '#f1c36f',
     opacity: 1,
+  },
+  tierStepCompleted: {
+    backgroundColor: '#E4B86B',
   },
   tierStepCurrent: {
     shadowColor: '#000000',
@@ -279,6 +355,17 @@ const styles = StyleSheet.create({
   tierStepText: {
     fontFamily: fontFamily.bodyBlack,
     fontSize: 14,
+    color: colors.brand.navy,
+    zIndex: 2,
+  },
+  tierStepPartial: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.72,
+  },
+  tierStepTextFuture: {
     color: colors.brand.navy,
   },
   sectionHead: {
@@ -329,4 +416,47 @@ const styles = StyleSheet.create({
     color: colors.brand.white,
   },
   strip: { position: 'absolute', left: 0, right: 0 },
+  voucherSheet: {
+    backgroundColor: loyaltyColors.bgTop,
+    paddingHorizontal: 24,
+    maxHeight: '92%',
+  },
+  voucherSheetScroll: {
+    gap: 16,
+    paddingBottom: 10,
+  },
+  sheetTitle: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 24,
+    color: colors.brand.white,
+    marginTop: 8,
+  },
+  sheetSub: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 13,
+    color:colors.brand.white,
+    marginTop: -8,
+  },
+  steps: { gap: 16, marginTop: 4 },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  num: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    backgroundColor: colors.brand.champagne,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numText: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 13,
+    color: colors.brand.navy,
+  },
+  stepText: {
+    flex: 1,
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    color: colors.brand.white,
+  },
 });

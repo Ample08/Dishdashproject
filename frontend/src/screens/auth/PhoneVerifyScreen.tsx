@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {
   BackButton,
@@ -35,7 +35,6 @@ function normalizePhone(raw: string) {
 
 export function PhoneVerifyScreen({navigation, route}: Props) {
   const {width, height} = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const provider = route.params?.provider;
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | undefined>();

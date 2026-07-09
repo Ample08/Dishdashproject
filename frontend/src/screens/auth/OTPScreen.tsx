@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {
   BackButton,
@@ -19,6 +19,7 @@ import {
   PrimaryButton,
 } from '../../components';
 import {colors, fontFamily} from '../../theme';
+import Animated, {Easing, FadeInRight} from 'react-native-reanimated';
 
 /**
  * OTP Verification (Figma 597:46)
@@ -37,7 +38,6 @@ function fmt(total: number) {
 
 export function OTPScreen({navigation, route}: Props) {
   const {width, height} = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const phone = route.params?.phone ?? '+971 50 XXX XXXX';
   const fromSso = route.params?.fromSso ?? false;
 
@@ -131,7 +131,9 @@ export function OTPScreen({navigation, route}: Props) {
           showsVerticalScrollIndicator={false}
           bounces={false}
           overScrollMode="never">
-          <View style={styles.body}>
+          <Animated.View
+            entering={FadeInRight.duration(300).easing(Easing.out(Easing.cubic))}
+            style={styles.body}>
             <View style={styles.hero}>
               <Text style={styles.title}>Six digits, then we're in.</Text>
               <Text style={styles.subtitle}>
@@ -166,7 +168,7 @@ export function OTPScreen({navigation, route}: Props) {
                 Same code works for sign-up and sign-in.
               </Text>
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

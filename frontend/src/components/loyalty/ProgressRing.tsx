@@ -1,17 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/Ionicons';
 import type { Tier } from '../../data/loyalty';
 import { colors, fontFamily } from '../../theme';
-
-const ACircle = Animated.createAnimatedComponent(Circle);
 
 type Props = {
   size?: number;
@@ -40,27 +32,11 @@ export function ProgressRing({
   const cy = size / 2;
   const C = 2 * Math.PI * r;
 
-  const prog = useSharedValue(0);
-  useEffect(() => {
-    prog.value = withTiming(progress, {
-      duration: 1200,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [progress, prog]);
-
-  // Arc starts at 6 o'clock (rotate +90°) and fills clockwise.
-  const arcProps = useAnimatedProps(() => ({
-    strokeDashoffset: C * (1 - prog.value),
-  }));
-
-  // Glowing head dot follows the arc end.
-  const headProps = useAnimatedProps(() => {
-    const theta = (Math.PI / 180) * (90 + prog.value * 360);
-    return {
-      cx: cx + r * Math.cos(theta),
-      cy: cy + r * Math.sin(theta),
-    };
-  });
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  const visibleArc = C * clampedProgress;
+  const theta = (Math.PI / 180) * (90 + clampedProgress * 360);
+  const headCx = cx + r * Math.cos(theta);
+  const headCy = cy + r * Math.sin(theta);
 
   return (
     <View style={{ width: size, height: size }}>
@@ -75,7 +51,7 @@ export function ProgressRing({
           fill="none"
         />
         {/* Tier arc */}
-        <ACircle
+        <Circle
           cx={cx}
           cy={cy}
           r={r}
@@ -83,18 +59,12 @@ export function ProgressRing({
           strokeWidth={stroke}
           strokeLinecap="round"
           fill="none"
-          strokeDasharray={C}
-          animatedProps={arcProps}
+          strokeDasharray={`${visibleArc} ${C}`}
           transform={`rotate(90 ${cx} ${cy})`}
         />
         {/* Head glow + dot */}
-        <ACircle
-          animatedProps={headProps}
-          r={11}
-          fill={tier.color}
-          opacity={0.35}
-        />
-        <ACircle animatedProps={headProps} r={6} fill={colors.brand.white} />
+        <Circle cx={headCx} cy={headCy} r={11} fill={tier.color} opacity={0.35} />
+        <Circle cx={headCx} cy={headCy} r={6} fill={colors.brand.white} />
       </Svg>
 
       {/* Centre text stack */}

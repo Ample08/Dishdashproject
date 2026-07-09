@@ -2,7 +2,6 @@ import React from 'react';
 import {ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import {AuroraBackground} from '../../components/loyalty/AuroraBackground';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
 import {MEMBERSHIP_TIERS, loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
@@ -20,7 +19,7 @@ export function MembershipTiersScreen({
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
-      <AuroraBackground />
+      {/* <AuroraBackground /> */}
       <LoyaltyHeader title="Membership Tiers" onBack={navigation.goBack} />
 
       <ScrollView
@@ -44,7 +43,7 @@ export function MembershipTiersScreen({
                     <View>
                       <Text style={styles.tierName}>
                         {t.name}
-                        {t.state === 'unlocked' ? ` · ${t.perk}` : ''}
+                        {t.state !== 'locked' ? ` · ${t.perk}` : ''}
                       </Text>
                       <Text style={styles.reach}>{t.reach}</Text>
                     </View>
@@ -53,10 +52,14 @@ export function MembershipTiersScreen({
                     style={[
                       styles.statusChip,
                       current && styles.chipCurrent,
-                      locked && styles.chipLocked,
+                      !current && styles.chipWhite,
                     ]}>
                     <Text
-                      style={[styles.statusText, current && styles.statusTextCurrent]}>
+                      style={[
+                        styles.statusText,
+                        current && styles.statusTextCurrent,
+                        !current && styles.statusTextOnWhite,
+                      ]}>
                       {t.state.toUpperCase()}
                     </Text>
                   </View>
@@ -77,7 +80,7 @@ export function MembershipTiersScreen({
         </View>
 
         <View style={styles.note}>
-          <Icon name="alert-circle-outline" size={18} color={colors.brand.navy} />
+          <Icon name="alert-circle-outline" size={20} color={'#EBCA90'} style={styles.noteIcon} />
           <View style={styles.noteText}>
             <Text style={styles.noteTitle}>Points reset annually</Text>
             <Text style={styles.noteBody}>
@@ -92,31 +95,30 @@ export function MembershipTiersScreen({
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: loyaltyColors.bgBottom},
+  root: {flex: 1, backgroundColor: loyaltyColors.bgall},
   scroll: {paddingHorizontal: 20, paddingTop: 18},
   eyebrow: {
     fontFamily: fontFamily.bodyBold,
     fontSize: 11,
     letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.6)',
+    color: colors.brand.champagne,
   },
   title: {fontFamily: fontFamily.displayBold, fontSize: 26, color: colors.brand.white, marginTop: 6},
-  sub: {fontFamily: fontFamily.bodyRegular, fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4},
+  sub: {fontFamily: fontFamily.bodyRegular, fontSize: 13, color: colors.brand.white, marginTop: 4},
 
   cards: {gap: 14, marginTop: 22},
   card: {
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1.2,
+    borderColor: colors.brand.white,   
     padding: 18,
   },
-  cardCurrent: {borderColor: colors.brand.champagne, backgroundColor: 'rgba(255,239,203,0.06)'},
+  cardCurrent: {borderColor: '#EBC98F',},
   cardHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   nameRow: {flexDirection: 'row', alignItems: 'center', gap: 10},
-  dot: {width: 10, height: 10, borderRadius: 5},
+  dot: {width: 10, height: 10, borderRadius: 5, bottom: 5},
   tierName: {fontFamily: fontFamily.bodyBold, fontSize: 16, color: colors.brand.white},
-  reach: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1},
+  reach: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: colors.brand.white, marginTop: 1},
   statusChip: {
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -126,21 +128,24 @@ const styles = StyleSheet.create({
   },
   chipCurrent: {backgroundColor: colors.brand.champagne, borderColor: colors.brand.champagne},
   chipLocked: {borderColor: 'rgba(255,255,255,0.25)'},
+  chipWhite: {backgroundColor: colors.brand.white, borderColor: colors.brand.white},
   statusText: {fontFamily: fontFamily.bodyBold, fontSize: 9, letterSpacing: 0.5, color: colors.brand.white},
   statusTextCurrent: {color: colors.brand.navy},
-  bigPerk: {fontFamily: fontFamily.displayBold, fontSize: 34, color: colors.brand.white, marginTop: 16},
-  perkSub: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 4},
-  more: {fontFamily: fontFamily.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 12},
+  statusTextOnWhite: {color: colors.brand.navy},
+  bigPerk: {fontFamily: fontFamily.bodyBold, fontSize: 34, color: colors.brand.white, marginTop: 16},
+  perkSub: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: colors.brand.white, marginTop: 4},
+  more: {fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.brand.white, marginTop: 12},
 
   note: {
     flexDirection: 'row',
     gap: 10,
     backgroundColor: colors.brand.white,
     borderRadius: 16,
-    padding: 14,
+    padding: 14,alignItems: 'center',
     marginTop: 20,
   },
   noteText: {flex: 1},
+  noteIcon: {bottom: 10},
   noteTitle: {fontFamily: fontFamily.bodyBold, fontSize: 13, color: colors.brand.navy},
-  noteBody: {fontFamily: fontFamily.bodyRegular, fontSize: 12, lineHeight: 17, color: 'rgba(28,35,48,0.7)', marginTop: 2},
+  noteBody: {fontFamily: fontFamily.bodyRegular, fontSize: 12, lineHeight: 17, color: colors.text.onButton, marginTop: 2},
 });
