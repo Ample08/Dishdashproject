@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import Animated, {Easing, FadeIn, FadeOut} from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Svg, {Defs, LinearGradient, Rect, Stop} from 'react-native-svg';
 import Icon1 from 'react-native-vector-icons/Octicons';
@@ -68,26 +69,32 @@ export function MyVouchersScreen({
           styles.scroll,
           {paddingBottom: insets.bottom + 24},
         ]}>
-        {visible.length === 0 ? (
-          <Text style={styles.empty}>No {tab.toLowerCase()} vouchers yet.</Text>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={CARD_W + 12}
-            decelerationRate="fast"
-            contentContainerStyle={styles.rail}>
-            {visible.map(v => (
-              <VoucherCard
-                key={v.id}
-                voucher={v}
-                width={CARD_W}
-                notchColor={loyaltyColors.bgall}
-                onRedeem={() => setRedeemTarget(v)}
-              />
-            ))}
-          </ScrollView>
-        )}
+        <Animated.View
+          key={tab}
+          entering={FadeIn.duration(250).easing(Easing.out(Easing.cubic))}
+          exiting={FadeOut.duration(250).easing(Easing.out(Easing.cubic))}>
+          {visible.length === 0 ? (
+            <Text style={styles.empty}>No {tab.toLowerCase()} vouchers yet.</Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={CARD_W + 12}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              contentContainerStyle={styles.rail}>
+              {visible.map(v => (
+                <VoucherCard
+                  key={v.id}
+                  voucher={v}
+                  width={CARD_W}
+                  notchColor={loyaltyColors.bgall}
+                  onRedeem={() => setRedeemTarget(v)}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </Animated.View>
 
         <View style={styles.promo}>
           <View style={styles.promosub}>
@@ -110,29 +117,37 @@ export function MyVouchersScreen({
               onPress={() => navigation.navigate('GenerateCelebration')}
               accessibilityRole="button">
               <ChampagneGradient />
-              <Text style={styles.promoBtnText}>+ Generate a code</Text>
+              <Text style={styles.promoBtnText}>+  Generate a code</Text>
             </Pressable>
           </View>
         </View>
       </ScrollView>
 
-      <BottomSheet visible={redeemOpen} onClose={() => setRedeemOpen(false)}>
-        <Text style={styles.sheetTitle}>How to redeem</Text>
+      <BottomSheet
+        visible={redeemOpen}
+        onClose={() => setRedeemOpen(false)}
+        enterDuration={300}
+        exitDuration={300}
+        sheetStyle={styles.howSheet}>
+        <Text style={styles.howTitle}>How to Redeem</Text>
+        <Text style={styles.howSubtitle}>
+          Show your code to staff at the restaurant
+        </Text>
 
         {REDEEM_STEPS.map((step, i) => (
-          <View key={i} style={styles.stepRow}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>{i + 1}</Text>
+          <View key={i} style={styles.howStepRow}>
+            <View style={styles.howStepNum}>
+              <Text style={styles.howStepNumText}>{i + 1}</Text>
             </View>
-            <Text style={styles.stepText}>{step}</Text>
+            <Text style={styles.howStepText}>{step}</Text>
           </View>
         ))}
 
         <Pressable
-          style={styles.gotItBtn}
+          style={styles.howGotItBtn}
           onPress={() => setRedeemOpen(false)}
           accessibilityRole="button">
-          <Text style={styles.gotItText}>Got it</Text>
+          <Text style={styles.howGotItText}>Got it</Text>
         </Pressable>
       </BottomSheet>
 
@@ -244,8 +259,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   rail: {
-    gap: 12,
-    paddingRight: 24,
+    gap: 10,
+    paddingRight: 18,
   },
   empty: {
     fontFamily: fontFamily.bodyRegular,
@@ -259,7 +274,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(235,201,143,0.45)',
     borderRadius: 28,
-    padding: 24,
+    padding: 20,
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   promosub: {
@@ -280,13 +295,13 @@ const styles = StyleSheet.create({
   },
   promoTitle: {
     fontFamily: fontFamily.bodyBold,
-    fontSize: 18,
+    fontSize: 15,
     color: colors.brand.white,
     marginBottom: 6,
   },
   promoBody: {
     fontFamily: fontFamily.bodyRegular,
-    fontSize: 15,
+    fontSize: 13,
     lineHeight: 21,
     color: colors.brand.white,
   },
@@ -302,7 +317,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   promoBtn: {
-    height: 56,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -310,7 +326,74 @@ const styles = StyleSheet.create({
   },
   promoBtnText: {
     fontFamily: fontFamily.bodyBold,
-    fontSize: 17,
+    fontSize: 14,
+    color: colors.brand.navy,
+  },
+
+  howSheet: {
+    backgroundColor: '#103f48',
+    paddingHorizontal: 25,
+    paddingTop: 12,
+    paddingBottom: 26,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: {width: 0, height: 12},
+    shadowRadius: 22,
+    elevation: 14,
+  },
+  howTitle: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 21,
+    lineHeight: 26,
+    color: colors.brand.white,
+    marginBottom: 2,
+  },
+  howSubtitle: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.62)',
+    marginBottom: 18,
+  },
+  howStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 15,
+  },
+  howStepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.brand.champagne,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howStepNumText: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 12,
+    color: colors.brand.navy,
+  },
+  howStepText: {
+    flex: 1,
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: 'rgba(255,255,255,0.82)',
+  },
+  howGotItBtn: {
+    marginTop: 14,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: colors.brand.pistachio,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howGotItText: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 13,
     color: colors.brand.navy,
   },
 

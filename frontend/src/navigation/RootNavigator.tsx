@@ -39,6 +39,7 @@ import {ExperienceHomeScreen} from '../screens/loyalty/ExperienceHomeScreen';
 import {ExperienceDetailScreen} from '../screens/loyalty/ExperienceDetailScreen';
 import {ExperienceBookedScreen} from '../screens/loyalty/ExperienceBookedScreen';
 import {LoyaltyBookingsScreen} from '../screens/loyalty/LoyaltyBookingsScreen';
+import {LoyaltyBookingDetailScreen} from '../screens/loyalty/LoyaltyBookingDetailScreen';
 import {PointHistoryScreen} from '../screens/loyalty/PointHistoryScreen';
 import type {RootStackParamList} from './types';
 
@@ -65,7 +66,7 @@ export function RootNavigator() {
       <Stack.Screen
         name="OTP"
         component={OTPScreen}
-        options={{animation: 'fade', animationDuration: 300}}
+        options={{animation: 'slide_from_right', animationDuration: 300}}
       />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="Location" component={LocationScreen} />
@@ -156,6 +157,10 @@ export function RootNavigator() {
         options={{animation: 'fade', gestureEnabled: false}}
       />
       <Stack.Screen name="LoyaltyBookings" component={LoyaltyBookingsScreen} />
+      <Stack.Screen
+        name="LoyaltyBookingDetail"
+        component={LoyaltyBookingDetailScreen}
+      />
       <Stack.Screen name="PointHistory" component={PointHistoryScreen} />
     </Stack.Navigator>
   );

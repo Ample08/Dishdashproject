@@ -35,6 +35,7 @@ type PieceCfg = {
   duration: number;
   rotate: number;
   startY: number;
+  lift: number;
 };
 
 function Piece({
@@ -44,6 +45,7 @@ function Piece({
   speed = 1,
   startBand = 36,
   driftRange = 160,
+  mode = 'rain',
 }: {
   index: number;
   width: number;
@@ -51,6 +53,7 @@ function Piece({
   speed?: number;
   startBand?: number;
   driftRange?: number;
+  mode?: 'rain' | 'burst';
 }) {
   const p = useSharedValue(0);
 
@@ -79,20 +82,27 @@ function Piece({
       h = 3 + rand(7.7) * 5;
     }
 
+    const burst = mode === 'burst';
+    const side = index % 2 === 0 ? -1 : 1;
+    const burstSpread = 24 + rand(12.9898) * (width * 0.42);
+
     return {
       color: PIECE_COLORS[index % PIECE_COLORS.length],
       width: w,
       height: h,
       radius: rand(8.8) > 0.5 ? 2 : 1,
-      startX: rand(12.9898) * width,
-      drift: (rand(78.233) - 0.5) * driftRange,
-      delay: rand(3.7) * 45 * speed,
-      duration: (950 + rand(9.1) * 450) * speed,
+      startX: burst ? width / 2 - w / 2 : rand(12.9898) * width,
+      drift: burst
+        ? side * burstSpread + (rand(78.233) - 0.5) * 44
+        : (rand(78.233) - 0.5) * driftRange,
+      delay: rand(3.7) * (burst ? 28 : 45) * speed,
+      duration: (burst ? 1150 + rand(9.1) * 450 : 950 + rand(9.1) * 450) * speed,
       rotate: (rand(5.5) > 0.5 ? 1 : -1) * (360 + rand(2.3) * 720),
       // Start near the top edge so the burst is visible immediately.
-      startY: rand(6.1) * startBand,
+      startY: burst ? startBand + rand(6.1) * 18 : rand(6.1) * startBand,
+      lift: burst ? 42 + rand(4.2) * 62 : 0,
     };
-  }, [driftRange, index, speed, startBand, width]);
+  }, [driftRange, index, mode, speed, startBand, width]);
 
   useEffect(() => {
     // Fall from top to bottom once, then fade out and stay hidden.
@@ -103,7 +113,8 @@ function Piece({
   }, [p, cfg]);
 
   const style = useAnimatedStyle(() => {
-    const travel = height + 180 - cfg.startY;
+    const travel = mode === 'burst' ? height * 0.58 - cfg.startY : height + 180 - cfg.startY;
+    const arc = mode === 'burst' ? -cfg.lift * Math.sin(Math.PI * p.value) : 0;
     return {
       width: cfg.width,
       height: cfg.height,
@@ -111,7 +122,7 @@ function Piece({
       backgroundColor: cfg.color,
       transform: [
         { translateX: cfg.startX + cfg.drift * p.value },
-        { translateY: cfg.startY + p.value * travel },
+        { translateY: cfg.startY + arc + p.value * travel },
         { rotate: `${cfg.rotate * p.value}deg` },
       ],
       opacity: p.value > 0.96 ? (1 - p.value) / 0.04 : 1,
@@ -126,11 +137,13 @@ export function Confetti({
   speed = 1,
   startBand = 36,
   driftRange = 160,
+  mode = 'rain',
 }: {
   count?: number;
   speed?: number;
   startBand?: number;
   driftRange?: number;
+  mode?: 'rain' | 'burst';
 }) {
   const { width, height } = useWindowDimensions();
   return (
@@ -144,6 +157,7 @@ export function Confetti({
           speed={speed}
           startBand={startBand}
           driftRange={driftRange}
+          mode={mode}
         />
       ))}
     </View>

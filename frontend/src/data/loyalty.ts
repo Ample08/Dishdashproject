@@ -114,6 +114,19 @@ export const SEED_VOUCHERS: Voucher[] = [
     status: 'available',
     code: 'CELEB-R7K4M2',
   },
+  // A previously redeemed voucher so the "Used" tab has content out of the box.
+  {
+    id: 'v-welcome-used',
+    kind: 'welcome',
+    label: 'WELCOME OFFER',
+    title: 'Welcome',
+    discount: '10%',
+    scope: 'DINE-IN ONLY',
+    sub: 'First dine-in',
+    action: 'Used',
+    status: 'used',
+    code: 'WELCOME-K9M2P4',
+  },
 ];
 
 /** "How to redeem" steps (WelcomeRevealOverlay 4068:345). */
@@ -188,42 +201,165 @@ export const EXPERIENCES: Experience[] = [
   },
 ];
 
+/** Lifecycle of an experience booking. Upcoming = future; the rest are "past". */
+export type LoyaltyBookingStatus =
+  | 'upcoming'
+  | 'completed'
+  | 'no-show'
+  | 'cancelled';
+
+/**
+ * Status pill colours (37 · My Bookings · Past + 38 · Booking Detail).
+ * `tint` = pill fill, `border` = pill outline, `dot` = leading dot.
+ * Source: Figma dot-pills — pistachio / champagne / soft-red at 0.18 fill.
+ */
+export const BOOKING_STATUS_META: Record<
+  LoyaltyBookingStatus,
+  {label: string; dot: string; tint: string; border: string}
+> = {
+  upcoming: {
+    label: 'UPCOMING',
+    dot: '#9ed387',
+    tint: 'rgba(158,212,135,0.18)',
+    border: 'rgba(158,212,135,0.4)',
+  },
+  completed: {
+    label: 'COMPLETED',
+    dot: '#9ed387',
+    tint: 'rgba(158,212,135,0.18)',
+    border: 'rgba(158,212,135,0.4)',
+  },
+  'no-show': {
+    label: 'NO SHOW',
+    dot: '#ffefcb',
+    tint: 'rgba(255,239,203,0.18)',
+    border: 'rgba(255,239,203,0.4)',
+  },
+  cancelled: {
+    label: 'CANCELLED',
+    dot: '#f27373',
+    tint: 'rgba(242,115,115,0.18)',
+    border: 'rgba(242,115,115,0.4)',
+  },
+};
+
 export type LoyaltyBooking = {
   id: string;
+  bookingId: string; // 'BK-X7K9M2' — shown on the detail
   brand: BrandKey;
   title: string;
-  dateLabel: string; // 'Sat 6 Jun 2026 · 7:30 PM'
-  location: string; // 'Dubai Mall'
+  dateLabel: string; // 'Sat 6 Jun 2026 · 7:30 PM' (list + home strip)
+  date: string; // 'Sat 6 Jun 2026' (detail row)
+  time: string; // '7:30 PM' (detail row)
+  location: string; // branch name, e.g. 'Dubai Mall'
+  address: string; // 'Fashion Avenue, Lower Ground, Dubai Mall'
+  guests: number;
+  points: number; // pts tied to the booking
   inDays: number;
   past?: boolean;
+  status: LoyaltyBookingStatus;
 };
 
 export const LOYALTY_BOOKINGS: LoyaltyBooking[] = [
+  // ── Upcoming ──────────────────────────────────────────────
   {
     id: 'lb-1',
+    bookingId: 'BK-X7K9M2',
     brand: 'Jade',
     title: "Chef's Table",
     dateLabel: 'Sat 6 Jun 2026 · 7:30 PM',
+    date: 'Sat 6 Jun 2026',
+    time: '7:30 PM',
     location: 'Dubai Mall',
+    address: 'Fashion Avenue, Lower Ground, Dubai Mall',
+    guests: 2,
+    points: 800,
     inDays: 4,
+    status: 'upcoming',
   },
   {
     id: 'lb-2',
+    bookingId: 'BK-2M5P8Q',
     brand: 'Karaz',
     title: 'Sunday Brunch Reserve',
     dateLabel: 'Sun 14 Jun 2026 · 12:00 PM',
+    date: 'Sun 14 Jun 2026',
+    time: '12:00 PM',
     location: 'JBR',
+    address: 'The Beach, JBR, Dubai',
+    guests: 4,
+    points: 400,
     inDays: 12,
+    status: 'upcoming',
   },
   {
     id: 'lb-3',
+    bookingId: 'BK-9R3T6L',
     brand: 'Jade',
     title: 'Private Dining Room',
     dateLabel: 'Sat 27 Jun 2026 · 8:00 PM',
+    date: 'Sat 27 Jun 2026',
+    time: '8:00 PM',
     location: 'Dubai Mall',
+    address: 'Fashion Avenue, Lower Ground, Dubai Mall',
+    guests: 6,
+    points: 2000,
     inDays: 25,
+    status: 'upcoming',
+  },
+  // ── Past ──────────────────────────────────────────────────
+  {
+    id: 'lb-4',
+    bookingId: 'BK-C7K9M2',
+    brand: 'Jade',
+    title: "Chef's Table",
+    dateLabel: 'Sat 25 Apr 2026 · 7:30 PM',
+    date: 'Sat 25 Apr 2026',
+    time: '7:30 PM',
+    location: 'Dubai Mall',
+    address: 'Fashion Avenue, Lower Ground, Dubai Mall',
+    guests: 2,
+    points: 800,
+    inDays: -42,
+    past: true,
+    status: 'completed',
+  },
+  {
+    id: 'lb-5',
+    bookingId: 'BK-N4K2P9',
+    brand: 'Karaz',
+    title: 'Sunday Brunch Reserve',
+    dateLabel: 'Sun 19 Apr 2026 · 12:00 PM',
+    date: 'Sun 19 Apr 2026',
+    time: '12:00 PM',
+    location: 'JBR',
+    address: 'The Beach, JBR, Dubai',
+    guests: 4,
+    points: 400,
+    inDays: -48,
+    past: true,
+    status: 'no-show',
+  },
+  {
+    id: 'lb-6',
+    bookingId: 'BK-X1C8V4',
+    brand: 'Jade',
+    title: 'Private Dining Room',
+    dateLabel: 'Sat 12 Apr 2026 · 8:00 PM',
+    date: 'Sat 12 Apr 2026',
+    time: '8:00 PM',
+    location: 'Dubai Mall',
+    address: 'Fashion Avenue, Lower Ground, Dubai Mall',
+    guests: 6,
+    points: 2000,
+    inDays: -55,
+    past: true,
+    status: 'cancelled',
   },
 ];
+
+export const bookingById = (id: string): LoyaltyBooking | undefined =>
+  LOYALTY_BOOKINGS.find(b => b.id === id);
 
 export type PointEntry = {
   id: string;
@@ -235,12 +371,12 @@ export type PointEntry = {
 
 export const POINT_HISTORY: PointEntry[] = [
   {id: 'p1', title: "Chef's Table booked", sub: 'Jade · Dubai Mall · 3 Jun 2026', delta: -800, icon: 'calendar-outline'},
-  {id: 'p2', title: 'Dine-in at Karaz', sub: 'Dubai Mall · 1 Jun 2026', delta: 42, icon: 'restaurant-outline'},
-  {id: 'p3', title: 'Pickup order', sub: 'Jade · Abu Dhabi · 28 May 2026', delta: 18, icon: 'bag-handle-outline'},
-  {id: 'p4', title: 'Friend joined Flavours', sub: 'Sarah · 22 May 2026', delta: 100, icon: 'person-add-outline'},
-  {id: 'p5', title: 'Dine-in at Jade', sub: 'Abu Dhabi · 17 May 2026', delta: 24, icon: 'restaurant-outline'},
-  {id: 'p6', title: 'Pickup order', sub: 'Karaz · JBR · 8 May 2026', delta: 12, icon: 'bag-handle-outline'},
-  {id: 'p7', title: 'Welcome bonus', sub: 'Joined Flavours · 1 May 2026', delta: 50, icon: 'gift-outline'},
+  {id: 'p2', title: 'Dine-in at Karaz', sub: 'Dubai Mall · 1 Jun 2026', delta: 42, icon: 'gift-outline'},
+  {id: 'p3', title: 'Pickup order', sub: 'Jade · Abu Dhabi · 28 May 2026', delta: 18, icon: 'bag-outline'},
+  {id: 'p4', title: 'Friend joined Flavours', sub: 'Sarah · 22 May 2026', delta: 100, icon: 'download-outline'},
+  {id: 'p5', title: 'Dine-in at Jade', sub: 'Abu Dhabi · 17 May 2026', delta: 24, icon: 'gift-outline'},
+  {id: 'p6', title: 'Pickup order', sub: 'Karaz · JBR · 8 May 2026', delta: 12, icon: 'bag-outline'},
+  {id: 'p7', title: 'Welcome bonus', sub: 'Joined Flavours · 1 May 2026', delta: 50, icon: 'download-outline'},
 ];
 
 /**
@@ -248,7 +384,7 @@ export const POINT_HISTORY: PointEntry[] = [
  * Design-only: these reach/perk strings are displayed as written, not derived.
  */
 export const MEMBERSHIP_TIERS = [
-  {name: 'Savor', dot: '#F4A574', reach: '1,000 pts to reach', perk: '5% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'unlocked' as const},
-  {name: 'Feast', dot: '#7DC9A0', reach: '2,500 pts to reach', perk: '10% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'current' as const},
-  {name: 'Gourmet', dot: '#D9E0F0', reach: '5,000 pts to reach', perk: '15% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'locked' as const, more: '250 more pts to unlock'},
+  {name: 'Savor', dot: '#8CB2C7', reach: '1,000 pts to reach', perk: '5% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'unlocked' as const},
+  {name: 'Feast', dot: '#EBC98F', reach: '2,500 pts to reach', perk: '10% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'current' as const},
+  {name: 'Gourmet', dot: '#BFBFC7', reach: '5,000 pts to reach', perk: '15% OFF', perkSub: 'off every dine-in bill · auto-applied at restaurant', state: 'locked' as const, more: '250 more pts to unlock'},
 ];

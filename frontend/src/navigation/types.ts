@@ -59,6 +59,7 @@ export type RootStackParamList = {
   ExperienceDetail: {experienceId: string};
   ExperienceBooked: {experienceId: string};
   LoyaltyBookings: undefined;
+  LoyaltyBookingDetail: {bookingId: string};
   PointHistory: undefined;
 };
 

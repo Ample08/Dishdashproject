@@ -29,6 +29,8 @@ type Props = {
   children: React.ReactNode;
   avoidKeyboard?: boolean;
   sheetStyle?: StyleProp<ViewStyle>;
+  enterDuration?: number;
+  exitDuration?: number;
 };
 
 export function BottomSheet({
@@ -37,6 +39,8 @@ export function BottomSheet({
   children,
   avoidKeyboard = false,
   sheetStyle: sheetStyleOverride,
+  enterDuration = 250,
+  exitDuration = 200,
 }: Props) {
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(0);
@@ -47,15 +51,15 @@ export function BottomSheet({
     if (visible) {
       setMounted(true);
       drag.value = 0;
-      progress.value = withTiming(1, {duration: 250});
+      progress.value = withTiming(1, {duration: enterDuration});
     } else {
-      progress.value = withTiming(0, {duration: 200}, finished => {
+      progress.value = withTiming(0, {duration: exitDuration}, finished => {
         if (finished) {
           runOnJS(setMounted)(false);
         }
       });
     }
-  }, [visible, progress, drag]);
+  }, [visible, progress, drag, enterDuration, exitDuration]);
 
   useEffect(() => {
     if (!avoidKeyboard) {

@@ -1,15 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Svg, {
-  Defs,
-  Ellipse,
-  LinearGradient,
-  RadialGradient,
-  Rect,
-  Stop,
-} from 'react-native-svg';
-import { loyaltyColors } from '../../data/loyalty';
 import { colors, fontFamily } from '../../theme';
 
 /**
@@ -71,7 +62,6 @@ export function LoyaltyStatusStrip({
 
   return (
     <View style={styles.wrap}>
-      <StripAurora />
       <View style={styles.strip}>
         <View style={styles.left}>
           <View style={styles.iconBg}>
@@ -121,90 +111,6 @@ export function LoyaltyStatusStrip({
   );
 }
 
-function StripAurora() {
-  const drift = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(drift, {
-          toValue: 1,
-          duration: 3600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(drift, {
-          toValue: 0,
-          duration: 3600,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [drift]);
-
-  const glowStyle = {
-    transform: [
-      {
-        translateX: drift.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-22, 22],
-        }),
-      },
-    ],
-    opacity: drift.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.72, 1],
-    }),
-  };
-
-  return (
-    <View style={styles.aurora} pointerEvents="none">
-      <Svg width="100%" height="100%" preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id="stripBase" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={loyaltyColors.bgTop} />
-            <Stop offset="1" stopColor={colors.brand.navy} />
-          </LinearGradient>
-          <RadialGradient id="stripMint" cx="0.5" cy="0.5" r="0.5">
-            <Stop
-              offset="0"
-              stopColor={loyaltyColors.auroraMint}
-              stopOpacity="0.72"
-            />
-            <Stop
-              offset="1"
-              stopColor={loyaltyColors.auroraMint}
-              stopOpacity="0"
-            />
-          </RadialGradient>
-          <RadialGradient id="stripGold" cx="0.5" cy="0.5" r="0.5">
-            <Stop
-              offset="0"
-              stopColor={loyaltyColors.auroraGold}
-              stopOpacity="0.62"
-            />
-            <Stop
-              offset="1"
-              stopColor={loyaltyColors.auroraGold}
-              stopOpacity="0"
-            />
-          </RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#stripBase)" />
-      </Svg>
-      <Animated.View style={[styles.glow, glowStyle]}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none">
-          <Ellipse cx="28%" cy="8%" rx="190" ry="74" fill="url(#stripMint)" />
-          <Ellipse cx="78%" cy="28%" rx="142" ry="70" fill="url(#stripGold)" />
-        </Svg>
-      </Animated.View>
-      <View style={styles.scrim} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   wrap: {
     overflow: 'hidden',
@@ -213,28 +119,6 @@ const styles = StyleSheet.create({
     paddingRight: 14,
     paddingVertical: 12,
     gap: 8,
-  },
-  aurora: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  glow: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  scrim: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(6,20,22,0.32)',
   },
   strip: {
     minHeight: 44,

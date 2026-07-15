@@ -1,5 +1,7 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StatusBar,
@@ -9,7 +11,6 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import {AuroraBackground} from '../../components/loyalty/AuroraBackground';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
 import {POINT_HISTORY, loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
@@ -17,6 +18,41 @@ import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 type Filter = 'All' | 'Earned' | 'Spent';
+
+function FlippingCoin() {
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(1600),
+        Animated.timing(spin, {
+          toValue: 1,
+          duration: 1300,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(spin, {toValue: 0, duration: 0, useNativeDriver: true}),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin]);
+
+  const rotateX = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Animated.View
+      style={[styles.coinFlip, {transform: [{perspective: 600}, {rotateX}]}]}>
+      <View style={styles.coin}>
+        <Icon name="star" size={16} color={colors.brand.navy} />
+      </View>
+    </Animated.View>
+  );
+}
 
 /** 39 · Point History (Figma 3950:6) — balance + filterable transaction list. */
 export function PointHistoryScreen({
@@ -37,7 +73,7 @@ export function PointHistoryScreen({
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
-      <AuroraBackground />
+     
       <LoyaltyHeader title="Point History" onBack={navigation.goBack} />
 
       <ScrollView
@@ -47,9 +83,7 @@ export function PointHistoryScreen({
         <View style={styles.balance}>
           <Text style={styles.balLabel}>CURRENT BALANCE</Text>
           <View style={styles.balRow}>
-            <View style={styles.coin}>
-              <Icon name="star" size={16} color={colors.brand.navy} />
-            </View>
+            <FlippingCoin />
             <Text style={styles.balValue}>{points.toLocaleString()}</Text>
             <Text style={styles.balUnit}>pts</Text>
           </View>
@@ -77,8 +111,16 @@ export function PointHistoryScreen({
         <View style={styles.list}>
           {rows.map(p => (
             <View key={p.id} style={styles.row}>
-              <View style={styles.rowIcon}>
-                <Icon name={p.icon} size={18} color={colors.brand.white} />
+              <View
+                style={[
+                  styles.rowIcon,
+                  p.delta > 0 ? styles.iconEarnedBg : styles.iconSpentBg,
+                ]}>
+                <Icon
+                  name={p.icon}
+                  size={18}
+                  color={p.delta > 0 ? colors.brand.pistachio : colors.brand.champagne}
+                />
               </View>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>{p.title}</Text>
@@ -96,19 +138,19 @@ export function PointHistoryScreen({
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: loyaltyColors.bgBottom},
+  root: {flex: 1, backgroundColor: loyaltyColors.bgall},
   scroll: {paddingHorizontal: 20, paddingTop: 16},
 
   balance: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+   borderColor: loyaltyColors.chipBorder, backgroundColor: loyaltyColors.chipBg,
     padding: 18,
   },
   balLabel: {fontFamily: fontFamily.bodyBold, fontSize: 11, letterSpacing: 0.8, color: 'rgba(255,255,255,0.6)'},
   balRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8},
   coin: {width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0b429', alignItems: 'center', justifyContent: 'center'},
+  coinFlip: {width: 32, height: 32, alignItems: 'center', justifyContent: 'center'},
   balValue: {fontFamily: fontFamily.bodyBlack, fontSize: 32, color: colors.brand.champagne},
   balUnit: {fontFamily: fontFamily.bodyMedium, fontSize: 14, color: 'rgba(255,255,255,0.7)'},
   resetRow: {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10},
@@ -117,7 +159,7 @@ const styles = StyleSheet.create({
   filters: {flexDirection: 'row', gap: 10, marginTop: 20},
   filter: {borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8},
   filterOn: {backgroundColor: colors.brand.champagne},
-  filterIdle: {borderWidth: 1, borderColor: loyaltyColors.chipBorder},
+  filterIdle: {borderWidth: 1, borderColor: loyaltyColors.chipBorder, backgroundColor: loyaltyColors.chipBg},
   filterText: {fontFamily: fontFamily.bodyBold, fontSize: 13, color: colors.brand.white},
   filterTextOn: {color: colors.brand.navy},
 
@@ -138,10 +180,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconEarnedBg: {backgroundColor: 'rgba(158,211,135,0.18)'}, // pistachio tint (Figma)
+  iconSpentBg: {backgroundColor: 'rgba(255,239,203,0.18)'}, // champagne tint (Figma)
   rowText: {flex: 1},
   rowTitle: {fontFamily: fontFamily.bodyBold, fontSize: 14, color: colors.brand.white},
-  rowSub: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2},
+  rowSub: {fontFamily: fontFamily.bodyRegular, fontSize: 12, color: colors.brand.white, marginTop: 2},
   delta: {fontFamily: fontFamily.bodyBold, fontSize: 15},
   earned: {color: colors.brand.pistachio},
-  spent: {color: 'rgba(255,255,255,0.85)'},
+  spent: {color: colors.brand.champagne},
 });
