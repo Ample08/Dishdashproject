@@ -18,6 +18,7 @@ import {
   OTPInput,
   PrimaryButton,
 } from '../../components';
+import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -45,7 +46,9 @@ export function OTPScreen({navigation, route}: Props) {
   const [error, setError] = useState(false);
   const [helper, setHelper] = useState<string | undefined>();
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
+  const [verifying, setVerifying] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const {verifyOtp, requestOtp} = useAuth();
 
   useEffect(() => {
     timer.current = setInterval(() => {
@@ -74,19 +77,40 @@ export function OTPScreen({navigation, route}: Props) {
     }
   };
 
-  const verify = (value: string) => {
+  const verify = async (value: string) => {
     if (value.length !== CODE_LENGTH) {
       setError(true);
       setHelper('Enter all 6 digits of the code.');
       return;
     }
-    // TODO: POST /auth/otp/verify — on mismatch: setError(true) +
-    // setHelper("That didn't match. N tries left.") (error-matrix #5/#6).
-    // Conditional routing on the SSO flag (Figma var auth/from-sso).
-    navigation.reset({
-      index: 0,
-      routes: [{name: 'ProfileSetup', params: {sso: fromSso}}],
-    });
+    if (verifying) {
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const {isNewUser} = await verifyOtp(phone, value);
+
+      // New users (and SSO sign-ups) go through profile setup; returning
+      // users with a saved profile jump straight into the app.
+      if (isNewUser || fromSso) {
+        navigation.reset({
+          index: 0,
+          routes: [{name: 'ProfileSetup', params: {sso: fromSso}}],
+        });
+      } else {
+        navigation.reset({index: 0, routes: [{name: 'MainTabs'}]});
+      }
+    } catch (e: any) {
+      setError(true);
+      setHelper(
+        e?.response?.status === 401
+          ? "That didn't match. Check the code and try again."
+          : 'Could not verify right now. Try again in a moment.',
+      );
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const resend = () => {
@@ -102,7 +126,8 @@ export function OTPScreen({navigation, route}: Props) {
     timer.current = setInterval(() => {
       setSeconds(prev => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
-    // TODO: POST /auth/otp/request again.
+    // Re-request the OTP (mock mode re-issues the fixed code).
+    requestOtp(phone).catch(() => {});
   };
 
   return (

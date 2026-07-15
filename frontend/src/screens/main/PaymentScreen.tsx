@@ -16,6 +16,7 @@ import {BRANDS} from '../../data/menu';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useCart} from '../../state/CartContext';
 import {useOrders} from '../../state/OrderContext';
+import {createOrder} from '../../services/orderService';
 import {colors, fontFamily, radius} from '../../theme';
 import { Coin } from '../../components';
 
@@ -34,23 +35,49 @@ const VAT_RATE = 0.05;
 export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
   const insets = useSafeAreaInsets();
   const {subtotal, count, lines} = useCart();
-  const {placeOrder} = useOrders();
+  const {placeOrder, startOrder} = useOrders();
   const [method, setMethod] = useState<Method>('card');
   const [saveCard, setSaveCard] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const vat = subtotal * VAT_RATE;
   const total = subtotal + SERVICE_FEE + vat;
   const totalLabel = total.toFixed(2);
 
-  const onPay = () => {
+  const onPay = async () => {
+    if (paying) {
+      return;
+    }
     const brandKey = lines[0]?.brand ?? 'Karaz';
-    placeOrder({
-      brand: brandKey,
-      branch: BRANDS[brandKey].branch,
-      itemCount: count,
-      total,
-      items: lines.map(l => ({qty: l.qty, name: l.name, price: l.price})),
-    });
+
+    setPaying(true);
+    try {
+      // Create the order on the backend (recomputes totals server-side).
+      const order = await createOrder({
+        brand: brandKey,
+        branch: BRANDS[brandKey].branch,
+        paymentMethod: method,
+        items: lines.map(l => ({
+          slug: l.id,
+          name: l.name,
+          qty: l.qty,
+          price: l.price,
+        })),
+      });
+      startOrder(order);
+    } catch {
+      // Offline / not signed in → fall back to a local demo order.
+      placeOrder({
+        brand: brandKey,
+        branch: BRANDS[brandKey].branch,
+        itemCount: count,
+        total,
+        items: lines.map(l => ({qty: l.qty, name: l.name, price: l.price})),
+      });
+    } finally {
+      setPaying(false);
+    }
+
     navigation.navigate('OrderSuccess');
   };
 

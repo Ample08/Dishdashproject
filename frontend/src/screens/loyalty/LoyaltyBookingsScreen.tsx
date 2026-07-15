@@ -10,8 +10,9 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AuroraBackground} from '../../components/loyalty/AuroraBackground';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
-import {LOYALTY_BOOKINGS, loyaltyColors} from '../../data/loyalty';
+import {loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
+import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 type Tab = 'Upcoming' | 'Past';
@@ -21,9 +22,10 @@ export function LoyaltyBookingsScreen({
   navigation,
 }: RootStackScreenProps<'LoyaltyBookings'>) {
   const insets = useSafeAreaInsets();
+  const {loyaltyBookings} = useLoyalty();
   const [tab, setTab] = useState<Tab>('Upcoming');
 
-  const visible = LOYALTY_BOOKINGS.filter(b =>
+  const visible = loyaltyBookings.filter(b =>
     tab === 'Past' ? b.past : !b.past,
   );
 

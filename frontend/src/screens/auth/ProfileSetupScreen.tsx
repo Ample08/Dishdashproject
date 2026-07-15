@@ -27,6 +27,7 @@ import {
 import { colors, fontFamily } from '../../theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
+import { useAuth } from '../../state/AuthContext';
 /**
  * Profile Setup (Figma 847:92)
  * Fixed header (back + progress) over a scrolling form: avatar, name/email/DOB,
@@ -70,10 +71,20 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
   const [photoOpen, setPhotoOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const referralInputRef = useRef<TextInput>(null);
+  const { updateProfile } = useAuth();
 
-  // After profile → permission primers. (TODO: POST /auth/profile.)
-  const finish = () =>
+  // Save the profile, then continue to the permission primers. The save is
+  // best-effort: if the API is unreachable we still move the user forward.
+  const finish = () => {
+    const name = `${firstName} ${lastName}`.trim();
+    const patch: { name?: string; email?: string } = {};
+    if (name) patch.name = name;
+    if (email.trim()) patch.email = email.trim();
+    if (patch.name || patch.email) {
+      updateProfile(patch).catch(() => {});
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
+  };
 
   const applyReferral = () => {
     Toast.show({

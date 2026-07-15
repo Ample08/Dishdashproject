@@ -28,6 +28,7 @@ import {
   SocialButton,
 } from '../../components';
 import {DEFAULT_COUNTRY, type Country} from '../../data/countries';
+import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -56,6 +57,8 @@ export function SignInScreen({navigation}: Props) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [countryOpen, setCountryOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const {requestOtp} = useAuth();
 
   const onChangePhone = (v: string) => {
     setPhone(v);
@@ -72,7 +75,7 @@ export function SignInScreen({navigation}: Props) {
     }
   };
 
-  const onSendCode = () => {
+  const onSendCode = async () => {
     const digits = normalizePhone(phone);
     // UAE numbers are 9 digits after +971; other countries vary, so accept 6–12.
     const valid = country.iso === 'AE' ? digits.length === 9 : digits.length >= 6;
@@ -85,9 +88,22 @@ export function SignInScreen({navigation}: Props) {
       return;
     }
     setError(undefined);
+    const fullPhone = `${country.dialCode} ${digits}`;
+
+    // Ask the backend to send the OTP. If it's unreachable we still continue —
+    // the OTP screen accepts the mock code (123456) once the API is back.
+    setSending(true);
+    try {
+      await requestOtp(fullPhone);
+    } catch {
+      // network/offline — proceed anyway
+    } finally {
+      setSending(false);
+    }
+
     // Phone path → from-sso stays false.
     navigation.navigate('OTP', {
-      phone: `${country.dialCode} ${digits}`,
+      phone: fullPhone,
       fromSso: false,
     });
   };

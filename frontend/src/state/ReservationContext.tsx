@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -17,6 +18,8 @@ import {
   type ShishaPref,
   type TimeSegment,
 } from '../data/reservations';
+import {useAuth} from './AuthContext';
+import * as reservationApi from '../services/reservationService';
 
 /**
  * Reservation state shared across the booking flow
@@ -87,8 +90,25 @@ type ReservationValue = {
 const ReservationContext = createContext<ReservationValue | null>(null);
 
 export function ReservationProvider({children}: {children: React.ReactNode}) {
+  const {token} = useAuth();
   const [draft, setDraft] = useState<ReservationDraft>(EMPTY_DRAFT);
   const [bookings, setBookings] = useState<Booking[]>(SEED_BOOKINGS);
+
+  // Once signed in, replace the seed list with the user's real bookings.
+  // Offline / signed-out → the bundled seed stays (mock fallback).
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    reservationApi
+      .fetchBookings()
+      .then(list => {
+        if (!cancelled && list.length) setBookings(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const patchDraft = useCallback((patch: Partial<ReservationDraft>) => {
     setDraft(prev => ({...prev, ...patch}));
@@ -117,6 +137,26 @@ export function ReservationProvider({children}: {children: React.ReactNode}) {
       status: 'awaiting',
     };
     setBookings(prev => [booking, ...prev]);
+
+    // Persist to the backend (best-effort). If it succeeds, adopt the
+    // server record (real booking_ref) so detail/cancel stay in sync.
+    reservationApi
+      .createBooking({
+        restaurant: booking.restaurant,
+        branch: booking.branch,
+        branchName: booking.branchName,
+        dateLabel: booking.dateLabel,
+        dateFull: booking.dateFull,
+        timeLabel: booking.timeLabel,
+        guests: booking.guests,
+        seatingLabel: booking.seatingLabel,
+        note: booking.note,
+      })
+      .then(saved => {
+        setBookings(prev => prev.map(b => (b.id === booking.id ? saved : b)));
+      })
+      .catch(() => {});
+
     return booking;
   }, [draft]);
 
@@ -125,10 +165,18 @@ export function ReservationProvider({children}: {children: React.ReactNode}) {
 
   const cancelBooking = useCallback((id: string) => {
     setStatus(id, 'cancelled');
+    reservationApi.cancelBooking(id).catch(() => {});
   }, []);
 
   const modifyBooking = useCallback((id: string, patch: Partial<Booking>) => {
     setBookings(prev => prev.map(b => (b.id === id ? {...b, ...patch} : b)));
+    reservationApi
+      .updateBooking(id, {
+        guests: patch.guests,
+        note: patch.note,
+        timeLabel: patch.timeLabel,
+      })
+      .catch(() => {});
   }, []);
 
   const value = useMemo<ReservationValue>(

@@ -6,6 +6,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import Toast, {type ToastConfig} from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {RootNavigator} from './src/navigation/RootNavigator';
+import {AuthProvider} from './src/state/AuthContext';
 import {CartProvider} from './src/state/CartContext';
 import {OrderProvider} from './src/state/OrderContext';
 import {ReservationProvider} from './src/state/ReservationContext';
@@ -37,17 +38,19 @@ function App() {
           <StatusBar
             barStyle={isDarkMode ? 'light-content' : 'dark-content'}
           />
-          <CartProvider>
-            <OrderProvider>
-              <ReservationProvider>
-                <LoyaltyProvider>
-                  <CateringProvider>
-                    <RootNavigator />
-                  </CateringProvider>
-                </LoyaltyProvider>
-              </ReservationProvider>
-            </OrderProvider>
-          </CartProvider>
+          <AuthProvider>
+            <CartProvider>
+              <OrderProvider>
+                <ReservationProvider>
+                  <LoyaltyProvider>
+                    <CateringProvider>
+                      <RootNavigator />
+                    </CateringProvider>
+                  </LoyaltyProvider>
+                </ReservationProvider>
+              </OrderProvider>
+            </CartProvider>
+          </AuthProvider>
           <Toast config={toastConfig} />
         </NavigationContainer>
       </SafeAreaProvider>

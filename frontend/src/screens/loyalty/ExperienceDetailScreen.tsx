@@ -12,6 +12,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {EXPERIENCES, loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
+import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 const DATES = ['Sat 6 Jun', 'Sun 7 Jun', 'Sat 13 Jun', 'Sun 20 Jun'];
@@ -26,6 +27,7 @@ export function ExperienceDetailScreen({
   route,
 }: RootStackScreenProps<'ExperienceDetail'>) {
   const insets = useSafeAreaInsets();
+  const {bookExperience} = useLoyalty();
   const exp = EXPERIENCES.find(e => e.id === route.params.experienceId);
   const [date, setDate] = useState(0);
   const [time, setTime] = useState(2);
@@ -116,7 +118,10 @@ export function ExperienceDetailScreen({
       <View style={[styles.footer, {paddingBottom: insets.bottom + 12}]}>
         <Pressable
           style={styles.cta}
-          onPress={() => navigation.replace('ExperienceBooked', {experienceId: exp.id})}
+          onPress={() => {
+            bookExperience(exp.id);
+            navigation.replace('ExperienceBooked', {experienceId: exp.id});
+          }}
           accessibilityRole="button">
           <Text style={styles.ctaText}>Book with {exp.pts} pts</Text>
         </Pressable>

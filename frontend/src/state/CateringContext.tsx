@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -10,6 +11,8 @@ import {
   type CateringInquiry,
   type EventType,
 } from '../data/catering';
+import {useAuth} from './AuthContext';
+import * as cateringApi from '../services/cateringService';
 
 /**
  * Catering inquiry state shared across the flow
@@ -78,8 +81,24 @@ type CateringValue = {
 const CateringContext = createContext<CateringValue | null>(null);
 
 export function CateringProvider({children}: {children: React.ReactNode}) {
+  const {token} = useAuth();
   const [draft, setDraft] = useState<CateringDraft>(EMPTY_DRAFT);
   const [inquiries, setInquiries] = useState<CateringInquiry[]>(SEED_INQUIRIES);
+
+  // Load the user's real inquiries once signed in (mock seed as fallback).
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    cateringApi
+      .fetchInquiries()
+      .then(list => {
+        if (!cancelled && list.length) setInquiries(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const patchDraft = useCallback((patch: Partial<CateringDraft>) => {
     setDraft(prev => ({...prev, ...patch}));
@@ -108,6 +127,26 @@ export function CateringProvider({children}: {children: React.ReactNode}) {
       status: 'awaiting',
     };
     setInquiries(prev => [inquiry, ...prev]);
+
+    // Persist to the backend (best-effort); adopt the server ref on success.
+    cateringApi
+      .createInquiry({
+        eventType: inquiry.eventType,
+        title: inquiry.title,
+        guests: inquiry.guests,
+        dateLabel: inquiry.dateLabel,
+        location: inquiry.location,
+        budget: inquiry.budget,
+        requirements: inquiry.requirements,
+        name: inquiry.name,
+        email: inquiry.email,
+        phone: inquiry.phone,
+      })
+      .then(saved => {
+        setInquiries(prev => prev.map(i => (i.id === inquiry.id ? saved : i)));
+      })
+      .catch(() => {});
+
     return inquiry;
   }, [draft]);
 

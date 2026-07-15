@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import type {BrandKey} from '../data/menu';
+import {fetchOrder} from '../services/orderService';
 
 /**
  * Active-order state shared by the Orders tab and the Order Status screen.
@@ -66,14 +67,17 @@ export type ActiveOrder = {
 
 type OrderValue = {
   active: ActiveOrder | null;
+  /** Local/demo order placement (used as a fallback when the API is offline). */
   placeOrder: (o: Omit<ActiveOrder, 'id' | 'status'>) => void;
+  /** Set an order that was created on the backend (has a real ref + status). */
+  startOrder: (order: ActiveOrder) => void;
   advance: () => void;
   clearOrder: () => void;
 };
 
 const OrderContext = createContext<OrderValue | null>(null);
 
-/** Seconds between automatic stage advances (demo of live status changes). */
+/** Poll / local-advance interval for live status changes. */
 const ADVANCE_MS = 8000;
 
 export function OrderProvider({children}: {children: React.ReactNode}) {
@@ -81,6 +85,10 @@ export function OrderProvider({children}: {children: React.ReactNode}) {
 
   const placeOrder = useCallback((o: Omit<ActiveOrder, 'id' | 'status'>) => {
     setActive({...o, id: 'CRV-00123', status: 'placed'});
+  }, []);
+
+  const startOrder = useCallback((order: ActiveOrder) => {
+    setActive(order);
   }, []);
 
   const clearOrder = useCallback(() => setActive(null), []);
@@ -98,17 +106,42 @@ export function OrderProvider({children}: {children: React.ReactNode}) {
     });
   }, []);
 
+  // Live status: poll the backend for the current stage; if it's unreachable
+  // (or this is a local demo order) fall back to advancing on a timer.
   useEffect(() => {
     if (!active || active.status === 'pickedup') {
       return;
     }
-    const t = setTimeout(advance, ADVANCE_MS);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    const orderId = active.id;
+
+    const tick = async () => {
+      try {
+        const latest = await fetchOrder(orderId);
+        if (!cancelled && latest) {
+          setActive(prev =>
+            prev && prev.id === latest.id
+              ? {...prev, status: latest.status}
+              : prev,
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          advance();
+        }
+      }
+    };
+
+    const t = setInterval(tick, ADVANCE_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [active, advance]);
 
   const value = useMemo<OrderValue>(
-    () => ({active, placeOrder, advance, clearOrder}),
-    [active, placeOrder, advance, clearOrder],
+    () => ({active, placeOrder, startOrder, advance, clearOrder}),
+    [active, placeOrder, startOrder, advance, clearOrder],
   );
 
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;

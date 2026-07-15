@@ -20,6 +20,7 @@ import {
   PrimaryButton,
 } from '../../components';
 import {DEFAULT_COUNTRY, type Country} from '../../data/countries';
+import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -41,6 +42,7 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
   const [error, setError] = useState<string | undefined>();
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [countryOpen, setCountryOpen] = useState(false);
+  const {requestOtp} = useAuth();
 
   const onChange = (v: string) => {
     setPhone(v);
@@ -70,9 +72,11 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
       return;
     }
     setError(undefined);
+    const fullPhone = `${country.dialCode} ${digits}`;
+    requestOtp(fullPhone).catch(() => {});
     // Post-SSO path → mark from-sso so OTP routes to Profile Setup (SSO).
     navigation.navigate('OTP', {
-      phone: `${country.dialCode} ${digits}`,
+      phone: fullPhone,
       fromSso: true,
       provider,
     });
