@@ -26,7 +26,11 @@ export function CateringSuccessScreen({
 }: RootStackScreenProps<'CateringSuccess'>) {
   const insets = useSafeAreaInsets();
   const { getInquiry } = useCatering();
+  // Once the backend responds, the optimistic record is swapped for the saved
+  // one (its id becomes the real server ref) — so fall back to the latest
+  // inquiry rather than showing a stale placeholder.
   const inquiry = getInquiry(route.params.inquiryId);
+  const inquiryRef = inquiry?.id ?? route.params.inquiryId;
   const [showPopper, setShowPopper] = useState(true);
 
   const badge = useSharedValue(0);
@@ -77,7 +81,7 @@ export function CateringSuccessScreen({
 
           <View style={styles.refPill}>
             <Text style={styles.refLabel}>Inquiry Ref</Text>
-            <Text style={styles.refValue}>{inquiry?.id ?? '#CRV-1042'}</Text>
+            <Text style={styles.refValue}>{inquiryRef}</Text>
           </View>
         </View>
       </View>

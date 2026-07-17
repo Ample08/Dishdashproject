@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -27,11 +27,71 @@ export function CateringInquiryStep2Screen({
   navigation,
 }: RootStackScreenProps<'CateringStep2'>) {
   const insets = useSafeAreaInsets();
-  const {draft, patchDraft, createInquiry} = useCatering();
+  const {draft, patchDraft, createInquiry, resetDraft} = useCatering();
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{
+    location?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    requirements?: string;
+  }>({});
 
-  const onSubmit = () => {
-    const inquiry = createInquiry();
-    navigation.navigate('CateringSuccess', {inquiryId: inquiry.id});
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const MIN_MSG = 50;
+  const MAX_MSG = 1000;
+
+  const clearErr = (k: keyof typeof errors) => {
+    if (errors[k]) setErrors(e => ({...e, [k]: undefined}));
+  };
+
+  // Catering contact validation (SRS · 8.1).
+  const onSubmit = async () => {
+    if (submitting) {
+      return;
+    }
+    const req = draft.requirements.trim();
+    const next: typeof errors = {};
+    if (!draft.location.trim()) {
+      next.location = 'Event location is required.';
+    }
+    if (draft.name.trim().length < 2) {
+      next.name = 'Enter your full name (at least 2 characters).';
+    }
+    if (!draft.email.trim()) {
+      next.email = 'Email is required.';
+    } else if (!EMAIL_RE.test(draft.email.trim())) {
+      next.email = 'Enter a valid email address.';
+    }
+    if (!draft.phone.trim()) {
+      next.phone = 'Phone is required.';
+    }
+    if (req.length < MIN_MSG) {
+      next.requirements = `Add at least ${MIN_MSG} characters (${req.length}/${MIN_MSG}).`;
+    } else if (req.length > MAX_MSG) {
+      next.requirements = `Keep it under ${MAX_MSG} characters.`;
+    }
+    setErrors(next);
+    if (Object.keys(next).length > 0) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const inquiry = await createInquiry();
+      resetDraft();
+      // Replace the form stack so back from Success goes to the inquiries list
+      // (and then Home), never back into the half-filled form.
+      navigation.reset({
+        index: 2,
+        routes: [
+          {name: 'MainTabs'},
+          {name: 'MyCateringInquiries'},
+          {name: 'CateringSuccess', params: {inquiryId: inquiry.id}},
+        ],
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -40,10 +100,11 @@ export function CateringInquiryStep2Screen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           contentContainerStyle={styles.scroll}>
           <Text style={styles.kicker}>DETAILS</Text>
           <Text style={styles.heading}>What you'd like included</Text>
@@ -52,21 +113,37 @@ export function CateringInquiryStep2Screen({
             <TextField
               label="Event Location *"
               value={draft.location}
-              onChangeText={v => patchDraft({location: v})}
+              onChangeText={v => {
+                patchDraft({location: v});
+                clearErr('location');
+              }}
               placeholder="Location/Venue"
+              error={errors.location}
             />
 
             <View style={styles.areaWrap}>
-              <Text style={styles.areaLabel}>Special Requirements</Text>
+              <View style={styles.areaLabelRow}>
+                <Text style={styles.areaLabel}>Special Requirements *</Text>
+                <Text style={styles.counter}>
+                  {draft.requirements.trim().length}/{MAX_MSG}
+                </Text>
+              </View>
               <TextInput
-                style={styles.textArea}
+                style={[styles.textArea, !!errors.requirements && styles.textAreaError]}
                 value={draft.requirements}
-                onChangeText={v => patchDraft({requirements: v})}
-                placeholder="Dietary needs, theme, equipment, vibe…"
+                onChangeText={v => {
+                  patchDraft({requirements: v});
+                  clearErr('requirements');
+                }}
+                placeholder="Tell us about your event — dietary needs, theme, menu, equipment, vibe… (min 50 characters)"
                 placeholderTextColor={colors.text.tertiary}
                 multiline
                 textAlignVertical="top"
+                maxLength={MAX_MSG}
               />
+              {errors.requirements ? (
+                <Text style={styles.fieldError}>{errors.requirements}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -81,24 +158,36 @@ export function CateringInquiryStep2Screen({
             <TextField
               label="Full Name *"
               value={draft.name}
-              onChangeText={v => patchDraft({name: v})}
+              onChangeText={v => {
+                patchDraft({name: v});
+                clearErr('name');
+              }}
               placeholder="Layla Ahmed"
               autoCapitalize="words"
+              error={errors.name}
             />
             <TextField
               label="Email *"
               value={draft.email}
-              onChangeText={v => patchDraft({email: v})}
+              onChangeText={v => {
+                patchDraft({email: v});
+                clearErr('email');
+              }}
               placeholder="layla.ahmad@gmail.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              error={errors.email}
             />
 
             <View style={styles.phoneWrap}>
               <Text style={styles.areaLabel}>Phone (WhatsApp preferred) *</Text>
               <PhoneField
                 value={draft.phone}
-                onChangeText={v => patchDraft({phone: v})}
+                onChangeText={v => {
+                  patchDraft({phone: v});
+                  clearErr('phone');
+                }}
+                error={errors.phone}
               />
               <View style={styles.whatsappNote}>
                 <Icon name="ellipse" size={8} color={colors.status.success} />
@@ -109,14 +198,15 @@ export function CateringInquiryStep2Screen({
             </View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
 
-      <View style={[styles.ctaBar, {paddingBottom: insets.bottom + 12}]}>
-        <CateringButton
-          label="Submit Inquiry"
-          onPress={onSubmit}
-        />
-      </View>
+        <View style={[styles.ctaBar, {paddingBottom: insets.bottom + 12}]}>
+          <CateringButton
+            label="Submit Inquiry"
+            onPress={onSubmit}
+            loading={submitting}
+          />
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -127,7 +217,7 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   kicker: {
     fontFamily: fontFamily.bodyBold,
@@ -147,10 +237,28 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   areaWrap: {gap: 6},
+  areaLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   areaLabel: {
     fontFamily: fontFamily.bodyBold,
     fontSize: 13,
     color: colors.text.secondary,
+  },
+  counter: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 11,
+    color: colors.text.tertiary,
+  },
+  fieldError: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 11,
+    color: colors.status.error,
+  },
+  textAreaError: {
+    borderColor: colors.status.error,
   },
   textArea: {
     minHeight: 88,

@@ -1,0 +1,10 @@
+# SPA fallback — send every non-file route to index.html so React Router
+# handles it (fixes 404 on refresh / deep links like /login, /dashboard).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>

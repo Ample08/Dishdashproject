@@ -3,20 +3,22 @@ import {Animated, Easing, Pressable, StyleSheet, Text, View} from 'react-native'
 import Icon from 'react-native-vector-icons/Ionicons';
 import {colors, fontFamily} from '../theme';
 import {GradientFill} from './GradientFill';
+import {useLoyalty} from '../state/LoyaltyContext';
+import type {TierKey} from '../data/loyalty';
 
 /**
  * HeroRewardsCard (Figma 2563:3110).
  * Champagne gradient card: points + Benefits, a centered "banner tab" header on
  * the inner panel, 4 tier chips (Taste active → Gourmet), "See your ways to
- * earn", and the earn-rate ticker.
+ * earn", and the earn-rate ticker. Points/tier are live from LoyaltyContext.
  */
-type Tier = {top: string; name: string; active?: boolean; filled?: boolean};
+type TierChip = {top: string; name: string; key: TierKey};
 
-const TIERS: Tier[] = [
-  {top: 'Now', name: 'Taste', active: true},
-  {top: '+1000', name: 'Savor'},
-  {top: '+2500', name: 'Feast'},
-  {top: '+5000', name: 'Gourmet', filled: true},
+const TIER_CHIPS: TierChip[] = [
+  {top: 'Now', name: 'Taste', key: 'taste'},
+  {top: '+1000', name: 'Savor', key: 'savor'},
+  {top: '+2500', name: 'Feast', key: 'feast'},
+  {top: '+5000', name: 'Gourmet', key: 'gourmet'},
 ];
 
 const TICKER_MSGS = [
@@ -82,11 +84,18 @@ export function HeroRewardsCard({
   onBenefitsPress?: () => void;
 }) {
   const [tick, setTick] = useState(0);
+  const {points, tier, next} = useLoyalty();
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 3000);
     return () => clearInterval(id);
   }, []);
+
+  // "X more to reach {next tier}" — or a top-tier message once maxed out.
+  const toNext = next ? Math.max(0, next.min - points) : 0;
+  const bannerText = next
+    ? `${toNext.toLocaleString()} more to reach ${next.name.toLowerCase()}`
+    : 'Top tier unlocked — enjoy the perks';
 
   return (
     <View style={styles.card}>
@@ -95,7 +104,7 @@ export function HeroRewardsCard({
       <View style={styles.topRow}>
         <View style={styles.pointsRow}>
           <Coin size={28} animated />
-          <Text style={styles.points}>100</Text>
+          <Text style={styles.points}>{points.toLocaleString()}</Text>
         </View>
         <Pressable
           style={styles.benefits}
@@ -108,33 +117,37 @@ export function HeroRewardsCard({
 
       <View style={styles.innerPanel}>
         <View style={styles.bannerTab}>
-          <Text style={styles.bannerText}>900 more to reach savor</Text>
+          <Text style={styles.bannerText}>{bannerText}</Text>
         </View>
 
         <View style={styles.panelBody}>
           <View style={styles.tierRow}>
-            {TIERS.map(tier => (
-              <View
-                key={tier.name}
-                style={[
-                  styles.tier,
-                  tier.filled && styles.tierFilled,
-                  tier.active && styles.tierActive,
-                ]}>
-                <Text style={[styles.tierTop, tier.filled && styles.tierTextLight]}>
-                  {tier.top}
-                </Text>
-                <Coin size={26} />
-                <Text
+            {TIER_CHIPS.map(chip => {
+              const active = chip.key === tier.key;
+              const filled = chip.key === 'gourmet';
+              return (
+                <View
+                  key={chip.name}
                   style={[
-                    styles.tierName,
-                    !tier.active && styles.tierNameMuted,
-                    tier.filled && styles.tierTextLight,
+                    styles.tier,
+                    filled && styles.tierFilled,
+                    active && styles.tierActive,
                   ]}>
-                  {tier.name}
-                </Text>
-              </View>
-            ))}
+                  <Text style={[styles.tierTop, filled && styles.tierTextLight]}>
+                    {active ? 'Now' : chip.top}
+                  </Text>
+                  <Coin size={26} />
+                  <Text
+                    style={[
+                      styles.tierName,
+                      !active && styles.tierNameMuted,
+                      filled && styles.tierTextLight,
+                    ]}>
+                    {chip.name}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
 
           <Pressable style={styles.earnBtn} onPress={onEarnPress} accessibilityRole="button">

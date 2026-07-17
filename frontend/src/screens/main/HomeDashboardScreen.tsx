@@ -1,4 +1,4 @@
-import React, {useRef, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Svg, {Circle, Defs, RadialGradient, Stop} from 'react-native-svg';
@@ -20,6 +21,8 @@ import {StatusStrip} from '../../components/StatusStrip';
 import {TonightsPicks} from '../../components/TonightsPicks';
 import type {TabScreenProps} from '../../navigation/types';
 import {dashboardImages} from '../../assets/dashboardImages';
+import {useAuth} from '../../state/AuthContext';
+import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -203,6 +206,19 @@ export function HomeDashboardScreen({navigation}: TabScreenProps<'Home'>) {
   const insets = useSafeAreaInsets();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [branch, setBranch] = useState('Dubai Mall');
+  const {user, refreshProfile} = useAuth();
+  const {tier} = useLoyalty();
+
+  // Keep the greeting/details fresh from the backend each time Home is shown.
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile();
+    }, [refreshProfile]),
+  );
+
+  // First name from the live profile; tier label from live loyalty points.
+  const firstName = user?.name?.trim().split(/\s+/)[0] || 'there';
+  const memberLabel = `${tier.name.toUpperCase()} MEMBER`;
 
   // Keep showing the sheet that was actually opened while it animates out —
   // otherwise the content swaps to the other sheet during the close.
@@ -229,12 +245,12 @@ export function HomeDashboardScreen({navigation}: TabScreenProps<'Home'>) {
             <View style={styles.greetingCol}>
               <Text style={styles.greetingHi}>Good evening,</Text>
               <View style={styles.nameRow}>
-                <Text style={styles.name}>Layla</Text>
+                <Text style={styles.name}>{firstName}</Text>
                 <Text style={styles.moon}> 🌙</Text>
               </View>
               <View style={styles.memberRow}>
                 <Icon name="person" size={13} color={colors.brand.pistachio} />
-                <Text style={styles.memberText}>TASTE · SINCE MAY 2026</Text>
+                <Text style={styles.memberText}>{memberLabel}</Text>
               </View>
             </View>
 

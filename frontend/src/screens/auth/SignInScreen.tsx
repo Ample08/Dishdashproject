@@ -28,6 +28,7 @@ import {
   SocialButton,
 } from '../../components';
 import {DEFAULT_COUNTRY, type Country} from '../../data/countries';
+import {classifyError, firstValidationMessage} from '../../services/api';
 import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 
@@ -90,16 +91,28 @@ export function SignInScreen({navigation}: Props) {
     setError(undefined);
     const fullPhone = `${country.dialCode} ${digits}`;
 
-    // Ask the backend to send the OTP. If it's unreachable we still continue —
-    // the OTP screen accepts the mock code (123456) once the API is back.
+    // Ask the backend to send the OTP. Only advance to the code screen once the
+    // request actually succeeds — otherwise show the right recovery per error.
     setSending(true);
     try {
       await requestOtp(fullPhone);
-    } catch {
-      // network/offline — proceed anyway
-    } finally {
+    } catch (e: any) {
       setSending(false);
+      const kind = classifyError(e);
+      if (kind === 'validation') {
+        // Error #1: backend rejected the number format.
+        setError(firstValidationMessage(e) ?? 'Enter a valid phone number.');
+        return;
+      }
+      // Error #3/#5: offline or server fault → toast + stay on this screen.
+      Toast.show({
+        type: 'info',
+        text1: kind === 'offline' ? "You're offline" : "Couldn't send the code",
+        text2: 'Check your connection and tap Send again.',
+      });
+      return;
     }
+    setSending(false);
 
     // Phone path → from-sso stays false.
     navigation.navigate('OTP', {
@@ -164,7 +177,11 @@ export function SignInScreen({navigation}: Props) {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(T.actions).duration(420)} style={styles.fullCenter}>
-              <PrimaryButton label="Send code on WhatsApp" onPress={onSendCode} />
+              <PrimaryButton
+                label="Send code on WhatsApp"
+                onPress={onSendCode}
+                loading={sending}
+              />
 
               <OrDivider />
 

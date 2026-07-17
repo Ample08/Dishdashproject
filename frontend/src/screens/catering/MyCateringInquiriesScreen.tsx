@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useCallback} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {CateringButton} from '../../components/catering/CateringButton';
@@ -23,7 +24,14 @@ export function MyCateringInquiriesScreen({
   navigation,
 }: RootStackScreenProps<'MyCateringInquiries'>) {
   const insets = useSafeAreaInsets();
-  const {inquiries} = useCatering();
+  const {inquiries, loaded, refreshInquiries} = useCatering();
+
+  // Pull the latest inquiries from the backend each time the screen is shown.
+  useFocusEffect(
+    useCallback(() => {
+      refreshInquiries();
+    }, [refreshInquiries]),
+  );
 
   return (
     <View style={styles.root}>
@@ -45,22 +53,51 @@ export function MyCateringInquiriesScreen({
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}>
-        <Text style={styles.count}>
-          {inquiries.length} {inquiries.length === 1 ? 'INQUIRY' : 'INQUIRIES'}
-        </Text>
+        {inquiries.length === 0 ? (
+          <View style={styles.empty}>
+            <Icon
+              name="document-text-outline"
+              size={44}
+              color={colors.text.tertiary}
+            />
+            <Text style={styles.emptyTitle}>
+              {loaded ? 'No inquiries yet' : 'Loading your inquiries…'}
+            </Text>
+            {loaded ? (
+              <Text style={styles.emptySub}>
+                When you submit a catering inquiry, it'll show up here so you can
+                track its status.
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <>
+            <Text style={styles.count}>
+              {inquiries.length} {inquiries.length === 1 ? 'INQUIRY' : 'INQUIRIES'}
+            </Text>
 
-        <View style={styles.list}>
-          {inquiries.map(inq => (
-            <InquiryCard key={inq.id} inquiry={inq} />
-          ))}
-        </View>
+            <View style={styles.list}>
+              {inquiries.map(inq => (
+                <InquiryCard
+                  key={inq.id}
+                  inquiry={inq}
+                  onPress={() =>
+                    navigation.navigate('CateringInquiryDetail', {
+                      inquiryId: inq.id,
+                    })
+                  }
+                />
+              ))}
+            </View>
 
-        <View style={styles.supportRow}>
-          <Text style={styles.supportText}>Need help with an inquiry?</Text>
-          <Pressable accessibilityRole="button" hitSlop={6}>
-            <Text style={styles.supportLink}>Contact Support →</Text>
-          </Pressable>
-        </View>
+            <View style={styles.supportRow}>
+              <Text style={styles.supportText}>Need help with an inquiry?</Text>
+              <Pressable accessibilityRole="button" hitSlop={6}>
+                <Text style={styles.supportLink}>Contact Support →</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View style={[styles.ctaBar, {paddingBottom: insets.bottom + 12}]}>
@@ -101,6 +138,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1.32,
     color: colors.brand.umabdallah,
     marginBottom: 14,
+  },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 90,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontFamily: fontFamily.displayBold,
+    fontSize: 20,
+    color: colors.text.primary,
+  },
+  emptySub: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   list: {gap: 14},
   supportRow: {

@@ -16,6 +16,8 @@ export function ExperienceCard({
   onPress?: () => void;
 }) {
   const e = experience;
+  const location = e.location?.trim();
+  const desc = e.desc?.trim();
   return (
     <Pressable
       style={[styles.card, !e.eligible && styles.cardLocked]}
@@ -47,14 +49,18 @@ export function ExperienceCard({
           )}
         </View>
 
-        <View style={styles.locationRow}>
-          <Icon name="location-outline" size={11} color={colors.brand.navy} />
-          <Text style={styles.location}>{e.location}</Text>
-        </View>
+        {location ? (
+          <View style={styles.locationRow}>
+            <Icon name="location-outline" size={11} color={colors.brand.navy} />
+            <Text style={styles.location}>{location}</Text>
+          </View>
+        ) : null}
 
-        <Text style={styles.desc} numberOfLines={2}>
-          {e.desc}
-        </Text>
+        {desc ? (
+          <Text style={styles.desc} numberOfLines={2}>
+            {desc}
+          </Text>
+        ) : null}
 
         <View style={styles.footer}>
           <View>

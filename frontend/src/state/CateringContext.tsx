@@ -6,11 +6,8 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import {
-  SEED_INQUIRIES,
-  type CateringInquiry,
-  type EventType,
-} from '../data/catering';
+import {type CateringInquiry, type EventType} from '../data/catering';
+import Toast from 'react-native-toast-message';
 import {useAuth} from './AuthContext';
 import * as cateringApi from '../services/cateringService';
 
@@ -62,20 +59,20 @@ function draftTitle(draft: CateringDraft): string {
   return guests > 0 ? `${noun} · ${guests} guests` : noun;
 }
 
-let inquirySeq = 1042;
-function nextInquiryId(): string {
-  inquirySeq += 1;
-  return `#CRV-${inquirySeq}`;
-}
-
 type CateringValue = {
   draft: CateringDraft;
   inquiries: CateringInquiry[];
+  /** True once the inquiries list has been fetched at least once. */
+  loaded: boolean;
   patchDraft: (patch: Partial<CateringDraft>) => void;
   resetDraft: () => void;
   getInquiry: (id: string) => CateringInquiry | undefined;
-  /** Commit the current draft as an 'awaiting' inquiry; returns the new record. */
-  createInquiry: () => CateringInquiry;
+  /** Submit the current draft to the backend; returns the saved server record. */
+  createInquiry: () => Promise<CateringInquiry>;
+  /** Re-fetch the full inquiry list from the backend (GET list). */
+  refreshInquiries: () => void;
+  /** Re-fetch a single inquiry by ref and merge it in (GET detail). */
+  refreshInquiry: (id: string) => void;
 };
 
 const CateringContext = createContext<CateringValue | null>(null);
@@ -83,18 +80,27 @@ const CateringContext = createContext<CateringValue | null>(null);
 export function CateringProvider({children}: {children: React.ReactNode}) {
   const {token} = useAuth();
   const [draft, setDraft] = useState<CateringDraft>(EMPTY_DRAFT);
-  const [inquiries, setInquiries] = useState<CateringInquiry[]>(SEED_INQUIRIES);
+  // Real inquiries only — no mock seed. Empty until the API responds.
+  const [inquiries, setInquiries] = useState<CateringInquiry[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-  // Load the user's real inquiries once signed in (mock seed as fallback).
+  // Load the user's real inquiries once signed in. Signed out → empty list.
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setInquiries([]);
+      setLoaded(false);
+      return;
+    }
     let cancelled = false;
     cateringApi
       .fetchInquiries()
       .then(list => {
-        if (!cancelled && list.length) setInquiries(list);
+        if (!cancelled) setInquiries(list);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -111,9 +117,27 @@ export function CateringProvider({children}: {children: React.ReactNode}) {
     [inquiries],
   );
 
-  const createInquiry = useCallback((): CateringInquiry => {
-    const inquiry: CateringInquiry = {
-      id: nextInquiryId(),
+  const refreshInquiries = useCallback(() => {
+    cateringApi
+      .fetchInquiries()
+      .then(list => setInquiries(list))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const refreshInquiry = useCallback((id: string) => {
+    cateringApi
+      .fetchInquiry(id)
+      .then(fresh => {
+        setInquiries(prev =>
+          prev.map(i => (i.id === fresh.id || i.id === id ? fresh : i)),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
+  const createInquiry = useCallback(async (): Promise<CateringInquiry> => {
+    const input = {
       eventType: draft.eventType ?? 'Other',
       title: draftTitle(draft),
       guests: Number(draft.guests) || 0,
@@ -124,42 +148,51 @@ export function CateringProvider({children}: {children: React.ReactNode}) {
       name: draft.name.trim(),
       email: draft.email.trim(),
       phone: draft.phone.trim(),
-      status: 'awaiting',
     };
-    setInquiries(prev => [inquiry, ...prev]);
 
-    // Persist to the backend (best-effort); adopt the server ref on success.
-    cateringApi
-      .createInquiry({
-        eventType: inquiry.eventType,
-        title: inquiry.title,
-        guests: inquiry.guests,
-        dateLabel: inquiry.dateLabel,
-        location: inquiry.location,
-        budget: inquiry.budget,
-        requirements: inquiry.requirements,
-        name: inquiry.name,
-        email: inquiry.email,
-        phone: inquiry.phone,
-      })
-      .then(saved => {
-        setInquiries(prev => prev.map(i => (i.id === inquiry.id ? saved : i)));
-      })
-      .catch(() => {});
-
-    return inquiry;
+    try {
+      const saved = await cateringApi.createInquiry(input);
+      console.log('[Catering] inquiry submitted on backend:', saved.id);
+      setInquiries(prev => [saved, ...prev.filter(i => i.id !== saved.id)]);
+      Toast.show({
+        type: 'success',
+        text1: 'Inquiry submitted successfully',
+        text2: `Ref ${saved.id} � we'll reach out within 24 hours.`,
+      });
+      return saved;
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Could not submit inquiry',
+        text2: 'Please check your connection and try again.',
+      });
+      throw error;
+    }
   }, [draft]);
 
   const value = useMemo<CateringValue>(
     () => ({
       draft,
       inquiries,
+      loaded,
       patchDraft,
       resetDraft,
       getInquiry,
       createInquiry,
+      refreshInquiries,
+      refreshInquiry,
     }),
-    [draft, inquiries, patchDraft, resetDraft, getInquiry, createInquiry],
+    [
+      draft,
+      inquiries,
+      loaded,
+      patchDraft,
+      resetDraft,
+      getInquiry,
+      createInquiry,
+      refreshInquiries,
+      refreshInquiry,
+    ],
   );
 
   return (

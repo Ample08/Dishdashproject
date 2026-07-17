@@ -11,23 +11,31 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {
   BackButton,
+  BottomSheet,
   CreamBackground,
   OTPInput,
   PrimaryButton,
 } from '../../components';
+import {classifyError} from '../../services/api';
+import {isProfileComplete} from '../../services/authService';
 import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 import Animated, {Easing, FadeInRight} from 'react-native-reanimated';
 
 /**
- * OTP Verification (Figma 597:46)
- * Six-digit code entry with resend countdown. Body @ top 130, px 28, gap 22.
+ * OTP Verification (Figma 597:46) + Error Handling matrix (Figma 6522:20892)
+ * Six-digit entry with resend countdown, wrong-attempt lockout, code expiry,
+ * and network/server-aware recovery. Body @ top 130, px 28, gap 22.
  */
 const CODE_LENGTH = 6;
-const RESEND_SECONDS = 45;
+const RESEND_SECONDS = 45; // resend cooldown
+const EXPIRY_SECONDS = 300; // code valid for 5 minutes
+const MAX_ATTEMPTS = 3; // wrong tries before a temporary lock
+const LOCK_SECONDS = 60; // lock duration after too many wrong tries
 
 type Props = RootStackScreenProps<'OTP'>;
 
@@ -45,31 +53,57 @@ export function OTPScreen({navigation, route}: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
   const [helper, setHelper] = useState<string | undefined>();
-  const [seconds, setSeconds] = useState(RESEND_SECONDS);
+  const [resendIn, setResendIn] = useState(RESEND_SECONDS);
+  const [expiryIn, setExpiryIn] = useState(EXPIRY_SECONDS);
+  const [expired, setExpired] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [lockIn, setLockIn] = useState(0); // >0 → temporarily locked
   const [verifying, setVerifying] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const wasLocked = useRef(false);
   const {verifyOtp, requestOtp} = useAuth();
 
+  const locked = lockIn > 0;
+
+  // Single 1s ticker drives every countdown (resend cooldown, code expiry, lock).
   useEffect(() => {
-    timer.current = setInterval(() => {
-      setSeconds(prev => {
-        if (prev <= 1) {
-          if (timer.current) {
-            clearInterval(timer.current);
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+    const t = setInterval(() => {
+      setResendIn(s => (s > 0 ? s - 1 : 0));
+      setLockIn(s => (s > 0 ? s - 1 : 0));
+      setExpiryIn(s => (s > 0 ? s - 1 : 0));
     }, 1000);
-    return () => {
-      if (timer.current) {
-        clearInterval(timer.current);
-      }
-    };
+    return () => clearInterval(t);
   }, []);
 
+  // Error #7: code expired (5 min idle) → clear cells, warn, force a resend.
+  useEffect(() => {
+    if (expiryIn === 0 && !expired) {
+      setExpired(true);
+      setCode('');
+      setError(false);
+      setHelper(undefined);
+      Toast.show({
+        type: 'info',
+        text1: 'Code expired',
+        text2: 'Tap resend to get a fresh code.',
+      });
+    }
+  }, [expiryIn, expired]);
+
+  // Error #6: lock lifted after the cooldown → let the user try again.
+  useEffect(() => {
+    if (lockIn === 0 && wasLocked.current) {
+      wasLocked.current = false;
+      setAttempts(0);
+      setError(false);
+      setHelper('You can try again now.');
+    }
+  }, [lockIn]);
+
   const onChange = (v: string) => {
+    if (locked || expired) {
+      return;
+    }
     setCode(v);
     if (error) {
       setError(false);
@@ -78,22 +112,23 @@ export function OTPScreen({navigation, route}: Props) {
   };
 
   const verify = async (value: string) => {
+    if (locked || expired || verifying) {
+      return;
+    }
     if (value.length !== CODE_LENGTH) {
       setError(true);
       setHelper('Enter all 6 digits of the code.');
       return;
     }
-    if (verifying) {
-      return;
-    }
 
     setVerifying(true);
     try {
-      const {isNewUser} = await verifyOtp(phone, value);
+      const {isNewUser, user} = await verifyOtp(phone, value);
 
-      // New users (and SSO sign-ups) go through profile setup; returning
-      // users with a saved profile jump straight into the app.
-      if (isNewUser || fromSso) {
+      // New users, SSO sign-ups, and anyone whose registration is incomplete
+      // (missing name / email / date of birth) go to Profile Setup; fully
+      // registered returning users jump straight into the app.
+      if (isNewUser || fromSso || !isProfileComplete(user)) {
         navigation.reset({
           index: 0,
           routes: [{name: 'ProfileSetup', params: {sso: fromSso}}],
@@ -102,32 +137,60 @@ export function OTPScreen({navigation, route}: Props) {
         navigation.reset({index: 0, routes: [{name: 'MainTabs'}]});
       }
     } catch (e: any) {
-      setError(true);
-      setHelper(
-        e?.response?.status === 401
-          ? "That didn't match. Check the code and try again."
-          : 'Could not verify right now. Try again in a moment.',
-      );
+      const kind = classifyError(e);
+      if (kind === 'conflict') {
+        // Error #2: phone already linked to another account.
+        setConflictOpen(true);
+      } else if (kind === 'offline') {
+        // Error #3: no connection.
+        setError(true);
+        setHelper("You're offline. Check your connection and try again.");
+      } else if (kind === 'auth') {
+        // Error #4/#6: wrong code — count the attempt, lock after MAX_ATTEMPTS.
+        const next = attempts + 1;
+        setAttempts(next);
+        setError(true);
+        setCode('');
+        if (next >= MAX_ATTEMPTS) {
+          wasLocked.current = true;
+          setLockIn(LOCK_SECONDS);
+          setHelper(undefined);
+        } else {
+          const left = MAX_ATTEMPTS - next;
+          setHelper(`That didn't match. ${left} ${left === 1 ? 'try' : 'tries'} left.`);
+        }
+      } else {
+        // Error #5: server fault / timeout.
+        setError(true);
+        setHelper("Couldn't verify right now. Tap to retry.");
+      }
     } finally {
       setVerifying(false);
     }
   };
 
-  const resend = () => {
-    if (seconds > 0) {
+  const resend = async () => {
+    // Error #8: resend disabled while cooling down or locked.
+    if (resendIn > 0 || locked) {
       return;
     }
     setCode('');
     setError(false);
-    setSeconds(RESEND_SECONDS);
-    if (timer.current) {
-      clearInterval(timer.current);
+    setHelper(undefined);
+    setResendIn(RESEND_SECONDS);
+    setExpiryIn(EXPIRY_SECONDS);
+    setExpired(false);
+    setAttempts(0);
+    try {
+      await requestOtp(phone);
+    } catch (e: any) {
+      const offline = classifyError(e) === 'offline';
+      Toast.show({
+        type: 'info',
+        text1: offline ? "You're offline" : "Couldn't send the code",
+        text2: 'Tap resend to try again.',
+      });
     }
-    timer.current = setInterval(() => {
-      setSeconds(prev => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-    // Re-request the OTP (mock mode re-issues the fixed code).
-    requestOtp(phone).catch(() => {});
   };
 
   return (
@@ -175,19 +238,34 @@ export function OTPScreen({navigation, route}: Props) {
               />
             </View>
 
-            {helper ? <Text style={styles.errorHelper}>{helper}</Text> : null}
+            {locked ? (
+              <Text style={styles.errorHelper}>
+                {`Too many attempts. Try again in ${fmt(lockIn)}.`}
+              </Text>
+            ) : helper ? (
+              <Text style={styles.errorHelper}>{helper}</Text>
+            ) : null}
 
             <View style={styles.actions}>
               <TouchableOpacity
-                activeOpacity={seconds > 0 ? 1 : 0.6}
+                activeOpacity={resendIn > 0 || locked ? 1 : 0.6}
                 onPress={resend}
-                disabled={seconds > 0}>
+                disabled={resendIn > 0 || locked}>
                 <Text style={styles.resend}>
-                  {seconds > 0 ? `No code yet?  Resend in ${fmt(seconds)}` : 'Resend code'}
+                  {locked
+                    ? `Locked · retry in ${fmt(lockIn)}`
+                    : resendIn > 0
+                    ? `No code yet?  Resend in ${fmt(resendIn)}`
+                    : 'Resend code'}
                 </Text>
               </TouchableOpacity>
 
-              <PrimaryButton label="Let me in" onPress={() => verify(code)} />
+              <PrimaryButton
+                label="Let me in"
+                onPress={() => verify(code)}
+                loading={verifying}
+                disabled={locked || expired}
+              />
 
               <Text style={styles.footnote}>
                 Same code works for sign-up and sign-in.
@@ -196,6 +274,22 @@ export function OTPScreen({navigation, route}: Props) {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Error #2: this phone is already tied to another account. */}
+      <BottomSheet visible={conflictOpen} onClose={() => setConflictOpen(false)}>
+        <Text style={styles.sheetTitle}>Number already linked</Text>
+        <Text style={styles.sheetBody}>
+          This number is already linked to another Flavours account. Sign in
+          there, or go back and use a different number.
+        </Text>
+        <PrimaryButton
+          label="Use a different number"
+          onPress={() => {
+            setConflictOpen(false);
+            navigation.goBack();
+          }}
+        />
+      </BottomSheet>
     </View>
     </SafeAreaView>
   );
@@ -260,5 +354,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.text.tertiary,
     textAlign: 'center',
+  },
+  sheetTitle: {
+    fontFamily: fontFamily.displayBold,
+    fontSize: 22,
+    color: colors.text.primary,
+    marginBottom: 10,
+  },
+  sheetBody: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.text.secondary,
+    marginBottom: 20,
   },
 });

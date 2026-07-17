@@ -7,7 +7,8 @@ import React, {
   useState,
 } from 'react';
 import type {BrandKey} from '../data/menu';
-import {fetchOrder} from '../services/orderService';
+import {fetchActiveOrder, fetchOrder} from '../services/orderService';
+import {useAuth} from './AuthContext';
 
 /**
  * Active-order state shared by the Orders tab and the Order Status screen.
@@ -81,7 +82,26 @@ const OrderContext = createContext<OrderValue | null>(null);
 const ADVANCE_MS = 8000;
 
 export function OrderProvider({children}: {children: React.ReactNode}) {
+  const {token} = useAuth();
   const [active, setActive] = useState<ActiveOrder | null>(null);
+
+  // On sign-in, pull the user's live (not-yet-collected) order from the backend
+  // so a placed order still shows in the Orders tab after an app restart.
+  useEffect(() => {
+    if (!token) {
+      setActive(null);
+      return;
+    }
+    let cancelled = false;
+    fetchActiveOrder()
+      .then(o => {
+        if (!cancelled && o) setActive(o);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const placeOrder = useCallback((o: Omit<ActiveOrder, 'id' | 'status'>) => {
     setActive({...o, id: 'CRV-00123', status: 'placed'});

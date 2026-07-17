@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import Toast from 'react-native-toast-message';
 import type {BrandKey} from '../data/menu';
 import {
   branchByKey,
@@ -153,9 +154,21 @@ export function ReservationProvider({children}: {children: React.ReactNode}) {
         note: booking.note,
       })
       .then(saved => {
+        console.log('[Reservation] booking created on backend:', saved.id);
         setBookings(prev => prev.map(b => (b.id === booking.id ? saved : b)));
+        Toast.show({
+          type: 'success',
+          text1: 'Reservation submitted successfully',
+          text2: `Ref ${saved.id} · we'll confirm shortly.`,
+        });
       })
-      .catch(() => {});
+      .catch(() => {
+        Toast.show({
+          type: 'info',
+          text1: 'Saved offline',
+          text2: "We'll sync your reservation once you're back online.",
+        });
+      });
 
     return booking;
   }, [draft]);

@@ -3,6 +3,7 @@ import {StatusBar, StyleSheet, View} from 'react-native';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {RootStackScreenProps} from '../../navigation/types';
+import {isProfileComplete} from '../../services/authService';
 import {colors} from '../../theme';
 
 /**
@@ -12,7 +13,9 @@ import {colors} from '../../theme';
  * and hands off when the animation finishes (with a safety fallback).
  */
 const SPLASH_BG = colors.brand.tealDeep;
-const ONBOARDING_KEY = '@flavours/onboarding_complete';
+// Same keys AuthContext persists the session under.
+const TOKEN_KEY = '@dishdash/token';
+const USER_KEY = '@dishdash/user';
 const SPLASH_ANIM = require('../../../assets/animations/flavours_splash_fillafter.json');
 
 // Safety fallback in case onAnimationFinish doesn't fire (anim is ~3.5s).
@@ -29,13 +32,19 @@ export function SplashScreen({navigation}: Props) {
     }
     advanced.current = true;
 
-    let complete = false;
+    // Route based on the saved session: no token → Sign In; token but the
+    // registration was never finished → Profile Setup; otherwise → Home.
+    let target: 'SignIn' | 'MainTabs' | 'ProfileSetup' = 'SignIn';
     try {
-      complete = (await AsyncStorage.getItem(ONBOARDING_KEY)) === 'true';
+      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      if (token) {
+        const raw = await AsyncStorage.getItem(USER_KEY);
+        const user = raw ? JSON.parse(raw) : null;
+        target = isProfileComplete(user) ? 'MainTabs' : 'ProfileSetup';
+      }
     } catch {
-      complete = false;
+      target = 'SignIn';
     }
-    const target = complete ? 'MainTabs' : 'SignIn';
     navigation.reset({index: 0, routes: [{name: target}]});
   }, [navigation]);
 

@@ -1,7 +1,5 @@
 import React, {useRef, useState} from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -80,24 +78,18 @@ export function ModifyBookingSheet({
   const scrollNoteIntoView = () => {
     setTimeout(() => {
       scrollRef.current?.scrollToEnd({animated: true});
-    }, 120);
+    }, 260);
   };
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      avoidKeyboard
       sheetStyle={styles.sheet}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
-        style={styles.keyboardWrap}>
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}>
         <View style={styles.panel}>
@@ -183,7 +175,6 @@ export function ModifyBookingSheet({
         </Pressable>
         </View>
       </ScrollView>
-      </KeyboardAvoidingView>
 
       <CalendarSheet
         visible={calendar}
@@ -212,10 +203,10 @@ function Radio({label, on, onPress}: {label: string; on: boolean; onPress: () =>
 const styles = StyleSheet.create({
   sheet: {
     backgroundColor: colors.brand.ivory,
+    maxHeight: '82%',
   },
-  keyboardWrap: {maxHeight: 620},
-  scroll: {maxHeight: 620},
-  scrollContent: {paddingBottom: 28},
+  scroll: {flexGrow: 0},
+  scrollContent: {paddingBottom: 96},
   panel: {
     backgroundColor: colors.brand.ivory,
     borderRadius: radius.card,

@@ -41,9 +41,11 @@ export function BrandPageScreen({navigation, route}: RootStackScreenProps<'Brand
   const brandKey = route.params.brand;
   const brand = BRANDS[brandKey];
   const cart = useCart();
+  // Guard: categories must be an array (backend may hydrate it late/oddly).
+  const categories = Array.isArray(brand.categories) ? brand.categories : [];
 
   const [mode, setMode] = useState<Mode>('Takeaway');
-  const [category, setCategory] = useState(brand.categories[0]);
+  const [category, setCategory] = useState(categories[0]);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [branchName, setBranchName] = useState(brand.branch);
 
@@ -190,7 +192,7 @@ const closeSheet = () => {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.tabsRow}>
-              {brand.categories.map(c => {
+              {categories.map(c => {
                 const active = c === category;
                 return (
                   <Pressable
@@ -296,10 +298,10 @@ function DishRow({
 
         <View style={styles.cardInfo}>
           <View style={styles.cardHead}>
-            <Text style={styles.dishName} numberOfLines={1}>
+            <Text style={styles.dishName} numberOfLines={2} ellipsizeMode="tail">
               {item.name}
             </Text>
-            <Text style={styles.dishDesc} numberOfLines={2}>
+            <Text style={styles.dishDesc} numberOfLines={2} ellipsizeMode="tail">
               {item.desc}
             </Text>
           </View>

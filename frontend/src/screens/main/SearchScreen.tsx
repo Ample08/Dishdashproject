@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -9,30 +9,90 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {Dirham} from '../../components/Dirham';
 import {ITEMS_BY_BRAND, type MenuItem} from '../../data/menu';
+import {fetchMenu} from '../../services/menuService';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useCart} from '../../state/CartContext';
 import {colors, fontFamily, radius} from '../../theme';
 
 /**
  * 21 · Karaz Search (Figma 1706:1866) — search field + Cancel, recent-search
- * chips, and live-filtered dish results (wide cards with add buttons).
+ * chips (persisted, removable), and live-filtered results from /api/app/menu.
  */
-const RECENT = ['Mixed Grill', 'Hummus', 'Shawarma', 'Falafel', 'Knafeh'];
+const RECENTS_KEY = '@dishdash/recent-searches';
+const MAX_RECENTS = 7;
+const DEFAULT_RESULTS_LIMIT = 7;
 
 export function SearchScreen({navigation, route}: RootStackScreenProps<'Search'>) {
   const insets = useSafeAreaInsets();
   const brand = route.params.brand;
   const cart = useCart();
   const [query, setQuery] = useState('');
+  // Live menu for this brand, from /api/app/menu (mock fallback on failure).
+  const [items, setItems] = useState<MenuItem[]>(ITEMS_BY_BRAND[brand]);
+  const [recents, setRecents] = useState<string[]>([]);
+
+  // Fetch the brand's menu from the API, and restore recent searches.
+  useEffect(() => {
+    let cancelled = false;
+    fetchMenu({brand})
+      .then(list => {
+        if (!cancelled && list.length) setItems(list);
+      })
+      .catch(() => {});
+    AsyncStorage.getItem(RECENTS_KEY)
+      .then(raw => {
+        if (!cancelled && raw) setRecents(JSON.parse(raw));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [brand]);
+
+  const persistRecents = (next: string[]) => {
+    const clean = next
+      .map(r => r.trim())
+      .filter(Boolean)
+      .filter((r, i, arr) => arr.findIndex(x => x.toLowerCase() === r.toLowerCase()) === i)
+      .slice(0, MAX_RECENTS);
+    setRecents(clean);
+    AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(clean)).catch(() => {});
+  };
+
+  // Remember a term when the user submits a search.
+  const addRecent = (term: string) => {
+    const t = term.trim();
+    if (!t) return;
+    const next = [t, ...recents.filter(r => r.toLowerCase() !== t.toLowerCase())].slice(
+      0,
+      MAX_RECENTS,
+    );
+    persistRecents(next);
+  };
+
+  const submitSearch = () => addRecent(query);
+
+  const selectRecent = (term: string) => {
+    setQuery(term);
+    addRecent(term);
+  };
+
+  const removeRecent = (term: string) =>
+    persistRecents(recents.filter(r => r.toLowerCase() !== term.toLowerCase()));
 
   const q = query.trim().toLowerCase();
-  const results = ITEMS_BY_BRAND[brand].filter(
-    i => q === '' || i.name.toLowerCase().includes(q) || i.desc.toLowerCase().includes(q),
+  const filteredResults = items.filter(
+    i =>
+      q === '' ||
+      (i.name ?? '').toLowerCase().includes(q) ||
+      (i.desc ?? '').toLowerCase().includes(q),
   );
+  const results = q === '' ? filteredResults.slice(0, DEFAULT_RESULTS_LIMIT) : filteredResults;
 
   return (
     <View style={styles.root}>
@@ -46,6 +106,8 @@ export function SearchScreen({navigation, route}: RootStackScreenProps<'Search'>
             style={styles.input}
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={submitSearch}
+            onBlur={submitSearch}
             placeholder="Search dishes"
             placeholderTextColor={colors.text.tertiary}
             autoFocus
@@ -66,16 +128,38 @@ export function SearchScreen({navigation, route}: RootStackScreenProps<'Search'>
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, {paddingBottom: insets.bottom + 24}]}>
-        {/* Recent searches */}
-        <Text style={styles.recentLabel}>Recent searches</Text>
-        <View style={styles.chips}>
-          {RECENT.map(r => (
-            <Pressable key={r} style={styles.chip} onPress={() => setQuery(r)}>
-              <Text style={styles.chipText}>{r}</Text>
-              <Icon name="close" size={13} color={colors.text.secondary} />
-            </Pressable>
-          ))}
-        </View>
+        {/* Recent searches (hidden while actively typing a query) */}
+        {recents.length > 0 && q === '' ? (
+          <>
+            <View style={styles.recentHeader}>
+              <Text style={styles.recentLabel}>Recent searches</Text>
+              <Pressable onPress={() => persistRecents([])} hitSlop={6}>
+                <Text style={styles.clearAll}>Clear all</Text>
+              </Pressable>
+            </View>
+            <View style={styles.chips}>
+              {recents.map(r => (
+                <View key={r} style={styles.chip}>
+                  <Pressable
+                    onPress={() => selectRecent(r)}
+                    hitSlop={4}
+                    accessibilityRole="button">
+                    <Text style={styles.chipText} numberOfLines={1}>
+                      {r}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => removeRecent(r)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${r} from recent searches`}>
+                    <Icon name="close" size={12} color={colors.text.secondary} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {/* Results */}
         <View style={styles.results}>
@@ -87,7 +171,10 @@ export function SearchScreen({navigation, route}: RootStackScreenProps<'Search'>
               onAdd={() => cart.add(item)}
               onInc={() => cart.inc(item.id)}
               onDec={() => cart.dec(item.id)}
-              onOpen={() => navigation.navigate('DishDetail', {itemId: item.id})}
+              onOpen={() => {
+                addRecent(query || item.name);
+                navigation.navigate('DishDetail', {itemId: item.id});
+              }}
             />
           ))}
           {results.length === 0 ? (
@@ -128,10 +215,10 @@ function ResultCard({
         </View>
         <View style={styles.cardInfo}>
           <View style={styles.cardHead}>
-            <Text style={styles.dishName} numberOfLines={1}>
+            <Text style={styles.dishName} numberOfLines={2} ellipsizeMode="tail">
               {item.name}
             </Text>
-            <Text style={styles.dishDesc} numberOfLines={2}>
+            <Text style={styles.dishDesc} numberOfLines={2} ellipsizeMode="tail">
               {item.desc}
             </Text>
           </View>
@@ -208,24 +295,47 @@ const styles = StyleSheet.create({
   cancel: {fontFamily: fontFamily.bodyBold, fontSize: 14, color: colors.brand.karaz},
 
   scroll: {paddingHorizontal: 20, paddingTop: 16, gap: 12},
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   recentLabel: {
     fontFamily: fontFamily.bodyBold,
     fontSize: 12,
     color: colors.text.tertiary,
   },
-  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  clearAll: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 12,
+    color: colors.brand.karaz,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 2,
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: '46%',
+    minHeight: 31,
     backgroundColor: colors.brand.white,
     borderWidth: 1,
     borderColor: colors.border.subtle,
     borderRadius: radius.pill,
-    paddingHorizontal: 12,
+    paddingLeft: 12,
+    paddingRight: 9,
     paddingVertical: 7,
   },
-  chipText: {fontFamily: fontFamily.bodyBold, fontSize: 12, color: colors.text.primary},
+  chipText: {
+    maxWidth: 112,
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 11,
+    color: colors.text.primary,
+  },
 
   results: {gap: 12, paddingTop: 4},
   noResults: {

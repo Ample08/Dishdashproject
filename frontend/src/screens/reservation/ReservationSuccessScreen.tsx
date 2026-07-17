@@ -19,8 +19,10 @@ export function ReservationSuccessScreen({
   route,
 }: RootStackScreenProps<'ReservationSuccess'>) {
   const insets = useSafeAreaInsets();
-  const { getBooking } = useReservations();
-  const booking = getBooking(route.params.bookingId);
+  const { getBooking, bookings } = useReservations();
+  // After the backend responds the optimistic record's id becomes the real
+  // booking ref, so fall back to the latest booking rather than going blank.
+  const booking = getBooking(route.params.bookingId) ?? bookings[0];
   const [showPopper, setShowPopper] = useState(true);
 
   useEffect(() => {

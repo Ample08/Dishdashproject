@@ -23,8 +23,75 @@ export const EVENT_TYPES: {key: EventType; label: string; icon: string}[] = [
   {key: 'Other', label: 'Other', icon: 'help-circle-outline'},
 ];
 
-/** Inquiry lifecycle: freshly submitted → team replied. */
-export type InquiryStatus = 'awaiting' | 'received';
+/**
+ * Inquiry lifecycle (SRS §8.2): submitted → admin workflow.
+ * `awaiting` is the backend's default on create; the admin moves it through
+ * New → Contacted → Quoted → Confirmed → Completed / Cancelled.
+ */
+export type InquiryStatus =
+  | 'awaiting'
+  | 'new'
+  | 'contacted'
+  | 'quoted'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled';
+
+/** Display meta for each inquiry status (pill + footer note). */
+export const INQUIRY_STATUS_META: Record<
+  InquiryStatus,
+  {label: string; tint: string; dot: string; icon: string; note: string}
+> = {
+  awaiting: {
+    label: 'Awaiting Response',
+    tint: 'rgba(237,199,128,0.35)',
+    dot: '#e0a83c',
+    icon: 'time-outline',
+    note: "We'll reach out within 24 hours.",
+  },
+  new: {
+    label: 'New',
+    tint: 'rgba(237,199,128,0.35)',
+    dot: '#e0a83c',
+    icon: 'sparkles-outline',
+    note: "We've received your inquiry and will be in touch soon.",
+  },
+  contacted: {
+    label: 'Contacted',
+    tint: 'rgba(41,89,168,0.14)',
+    dot: '#2959a8',
+    icon: 'chatbubble-ellipses-outline',
+    note: 'Our team has reached out — check your email or WhatsApp.',
+  },
+  quoted: {
+    label: 'Quoted',
+    tint: 'rgba(41,89,168,0.14)',
+    dot: '#2959a8',
+    icon: 'document-text-outline',
+    note: 'A quote is ready — review it in your email or WhatsApp.',
+  },
+  confirmed: {
+    label: 'Confirmed',
+    tint: 'rgba(158,211,135,0.30)',
+    dot: '#2f9e44',
+    icon: 'checkmark-circle-outline',
+    note: "You're confirmed! We'll share final details before the event.",
+  },
+  completed: {
+    label: 'Completed',
+    tint: 'rgba(158,211,135,0.22)',
+    dot: '#2f9e44',
+    icon: 'ribbon-outline',
+    note: 'Event completed — thank you for hosting with us.',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    tint: 'rgba(224,52,45,0.12)',
+    dot: '#e0342d',
+    icon: 'close-circle-outline',
+    note: 'This inquiry was cancelled.',
+  },
+};
 
 export type CateringInquiry = {
   id: string; // '#CRV-1042'
@@ -106,54 +173,3 @@ export const CATERING_REVIEWS: CateringReview[] = [
   },
 ];
 
-/** Seed inquiries shown on My Inquiries (UA5). */
-export const SEED_INQUIRIES: CateringInquiry[] = [
-  {
-    id: '#CRV-1042',
-    eventType: 'Corporate',
-    title: 'Corporate Dinner · 80 guests',
-    guests: 80,
-    dateLabel: '15 Apr 2026',
-    location: 'Abu Dhabi',
-    name: 'Layla Ahmed',
-    email: 'layla.ahmad@gmail.com',
-    phone: '50 123 4567',
-    status: 'awaiting',
-  },
-  {
-    id: '#CRV-0998',
-    eventType: 'Wedding',
-    title: 'Wedding Reception · 120 guests',
-    guests: 120,
-    dateLabel: '18 Apr 2026',
-    location: 'Palm Jumeirah · Dubai',
-    name: 'Layla Ahmed',
-    email: 'layla.ahmad@gmail.com',
-    phone: '50 123 4567',
-    status: 'received',
-  },
-  {
-    id: '#CRV-0921',
-    eventType: 'Iftar',
-    title: 'Family Iftar · 35 guests',
-    guests: 35,
-    dateLabel: '5 Apr 2026',
-    location: 'Al Ain',
-    name: 'Layla Ahmed',
-    email: 'layla.ahmad@gmail.com',
-    phone: '50 123 4567',
-    status: 'received',
-  },
-  {
-    id: '#CRV-0875',
-    eventType: 'Birthday',
-    title: 'Birthday Lunch · 25 guests',
-    guests: 25,
-    dateLabel: '12 Mar 2026',
-    location: 'JBR · Dubai',
-    name: 'Layla Ahmed',
-    email: 'layla.ahmad@gmail.com',
-    phone: '50 123 4567',
-    status: 'received',
-  },
-];

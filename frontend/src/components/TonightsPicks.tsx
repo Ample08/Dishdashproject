@@ -1,84 +1,14 @@
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {dashboardImages} from '../assets/dashboardImages';
+import {useNavigation} from '@react-navigation/native';
+import {ITEMS_BY_BRAND, type BrandKey} from '../data/menu';
+import {useCart} from '../state/CartContext';
 import {colors, fontFamily} from '../theme';
-import {DishCard, type Dish} from './DishCard';
-
-const KARAZ_DISHES: Dish[] = [
-  {
-    name: 'Mansaf Royale',
-    desc: 'Lamb on jameed yogurt sauce · saffron rice almonds...',
-    image: dashboardImages.dishes.mansaf,
-    price: 78,
-  },
-  {
-    name: 'Maklouba',
-    desc: 'Upside-down spiced rice, chicken, eggplant pine nuts...',
-    image: dashboardImages.dishes.maklouba,
-    price: 55,
-    oldPrice: 78,
-    discountPct: 30,
-  },
-  {
-    name: 'Shish Tawook',
-    desc: 'Marinated chicken skewers · garlic toum · pickles...',
-    image: dashboardImages.dishes.shish,
-    price: 78,
-  },
-  {
-    name: 'Hummus Beiruti',
-    desc: 'Chickpea puree · tahini · parsley · pomegranate...',
-    image: dashboardImages.dishes.hummus,
-    price: 78,
-    qty: 1,
-  },
-  {
-    name: 'Kibbeh Nayyeh',
-    desc: 'Raw spiced lamb · bulgur · mint · onion · olive oil...',
-    image: dashboardImages.dishes.kibbeh,
-    price: 78,
-  },
-  {
-    name: 'Fattoush Salad',
-    desc: 'Mixed greens · sumac · pomegranate molasses · pita...',
-    image: dashboardImages.dishes.fattoush,
-    price: 78,
-    soldOut: true,
-  },
-];
-
-const JADE_DISHES: Dish[] = [
-  {
-    name: 'Creamy Phyllo with Pistachio and Almond',
-    desc: 'Slow-braised lamb shoulder · saffron rice · pickled onions...',
-    image: dashboardImages.dishes.phyllo,
-    price: 55,
-    oldPrice: 78,
-    discountPct: 30,
-  },
-  {
-    name: 'Cardamom Lamb',
-    desc: 'Arborio rice · saffron · parmesan · golden raisins...',
-    image: dashboardImages.dishes.mansaf,
-    price: 78,
-  },
-  {
-    name: 'Creamy Phyllo with Pistachio and Almond',
-    desc: 'Chickpea cream · black truffle · tahini · pita crackers...',
-    image: dashboardImages.dishes.phyllo,
-    price: 55,
-    oldPrice: 78,
-    discountPct: 30,
-  },
-  {
-    name: 'Date Tagine',
-    desc: 'Medjool dates · warm spices · toasted almonds...',
-    image: dashboardImages.dishes.kanafeh,
-    price: 78,
-  },
-];
+import {DishCard} from './DishCard';
 
 const BRANDS = ['KARAZ', 'JADE'] as const;
+const brandKeyOf = (b: (typeof BRANDS)[number]): BrandKey =>
+  b === 'JADE' ? 'Jade' : 'Karaz';
 
 export function TonightsPicks({
   branch = 'Dubai Mall',
@@ -88,7 +18,10 @@ export function TonightsPicks({
   onSwitchBranch?: () => void;
 }) {
   const [brand, setBrand] = useState<(typeof BRANDS)[number]>('KARAZ');
-  const dishes = brand === 'JADE' ? JADE_DISHES : KARAZ_DISHES;
+  const navigation = useNavigation<any>();
+  const cart = useCart();
+  // Live menu items for this brand (hydrated from /api/app/menu).
+  const dishes = ITEMS_BY_BRAND[brandKeyOf(brand)].slice(0, 6);
   const branchLabel = brand === 'JADE' ? 'Jade Dubai Mall' : `Karaz ${branch}`;
 
   const switchBrand = (next: (typeof BRANDS)[number]) => {
@@ -132,9 +65,26 @@ export function TonightsPicks({
       </View>
 
       <View style={styles.list}>
-        {dishes.map((dish, index) => (
+        {dishes.map((item, index) => (
           <View key={`tonight-pick-slot-${index}`}>
-            <DishCard key={`${brand}-${dish.name}-${index}`} dish={dish} />
+            <DishCard
+              key={`${brand}-${item.id}-${index}`}
+              dish={{
+                id: item.id,
+                name: item.name,
+                desc: item.desc,
+                image: item.image,
+                price: item.price,
+                oldPrice: item.oldPrice,
+                discountPct: item.discountPct,
+                soldOut: item.soldOut,
+              }}
+              qty={cart.qtyOf(item.id)}
+              onAdd={() => cart.add(item)}
+              onInc={() => cart.inc(item.id)}
+              onDec={() => cart.dec(item.id)}
+              onPress={() => navigation.navigate('DishDetail', {itemId: item.id})}
+            />
           </View>
         ))}
       </View>

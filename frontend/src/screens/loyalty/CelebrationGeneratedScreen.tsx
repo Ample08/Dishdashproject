@@ -76,6 +76,7 @@ export function CelebrationGeneratedScreen({
           <VoucherCard
             voucher={voucher}
             initiallyRevealed
+            hideClaimStamp
             notchColor={loyaltyColors.bgTop}
           />
         </View>

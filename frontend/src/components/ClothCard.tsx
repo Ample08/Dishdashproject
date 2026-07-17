@@ -223,14 +223,20 @@ export function ClothCard({
                 <Text style={styles.area}>{branch.area}</Text>
 
                 <View style={styles.tags}>
-                  {branch.tags.map(tag => (
+                  {(Array.isArray(branch.tags) ? branch.tags : []).map(tag => (
                     <View key={tag} style={styles.tag}>
                       <Text style={styles.tagText}>{tag}</Text>
                     </View>
                   ))}
                 </View>
 
-                <FactTicker lines={[branch.highlight, ...branch.facts]} active={expanded} />
+                <FactTicker
+                  lines={[
+                    branch.highlight,
+                    ...(Array.isArray(branch.facts) ? branch.facts : []),
+                  ]}
+                  active={expanded}
+                />
 
                 <View style={styles.loved}>
                   <Icon name="flame" size={14} color="#ffb238" />

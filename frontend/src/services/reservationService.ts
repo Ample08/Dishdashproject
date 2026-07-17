@@ -8,11 +8,28 @@ type ApiBranch = {
   area: string;
   rating: number | string;
   rating_count: string;
-  tags: string[] | null;
+  // Backend sends these as JSON-encoded strings, e.g. '["Arabic","Turkish"]'.
+  tags: string[] | string | null;
   highlight: string;
   most_loved: string;
-  facts: string[] | null;
+  facts: string[] | string | null;
 };
+
+/** Normalize a backend list field (JSON string or array) to a string[]. */
+function parseList(raw: string[] | string | null): string[] | undefined {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
 
 type ApiBooking = {
   booking_ref: string;
@@ -68,10 +85,10 @@ export async function hydrateBranches(): Promise<boolean> {
       target.area = b.area;
       target.rating = Number(b.rating);
       target.ratingCount = b.rating_count;
-      target.tags = b.tags ?? target.tags;
+      target.tags = parseList(b.tags) ?? target.tags;
       target.highlight = b.highlight;
       target.mostLoved = b.most_loved;
-      target.facts = b.facts ?? target.facts;
+      target.facts = parseList(b.facts) ?? target.facts;
     });
     return true;
   } catch {

@@ -30,6 +30,7 @@ import {CateringInquiryStep1Screen} from '../screens/catering/CateringInquirySte
 import {CateringInquiryStep2Screen} from '../screens/catering/CateringInquiryStep2Screen';
 import {CateringSuccessScreen} from '../screens/catering/CateringSuccessScreen';
 import {MyCateringInquiriesScreen} from '../screens/catering/MyCateringInquiriesScreen';
+import {CateringInquiryDetailScreen} from '../screens/catering/CateringInquiryDetailScreen';
 import {MyVouchersScreen} from '../screens/loyalty/MyVouchersScreen';
 import {WelcomeRevealScreen} from '../screens/loyalty/WelcomeRevealScreen';
 import {GenerateCelebrationScreen} from '../screens/loyalty/GenerateCelebrationScreen';
@@ -133,6 +134,10 @@ export function RootNavigator() {
       <Stack.Screen
         name="MyCateringInquiries"
         component={MyCateringInquiriesScreen}
+      />
+      <Stack.Screen
+        name="CateringInquiryDetail"
+        component={CateringInquiryDetailScreen}
       />
 
       {/* Loyalty flow (pushed over the tabs) */}

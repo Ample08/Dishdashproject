@@ -19,8 +19,6 @@ import { ProgressRing } from '../../components/loyalty/ProgressRing';
 import { TierPerkPill } from '../../components/loyalty/TierPerkPill';
 import { VoucherCard, VoucherRailCard } from '../../components/loyalty/Voucher';
 import {
-  EXPERIENCES,
-  LOYALTY_BOOKINGS,
   REDEEM_STEPS,
   TIERS,
   loyaltyColors,
@@ -36,13 +34,27 @@ import { colors, fontFamily } from '../../theme';
  */
 export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
   const insets = useSafeAreaInsets();
-  const { points, tier, next, vouchers, coachSeen, dismissCoach } =
-    useLoyalty();
+  const {
+    points,
+    tier,
+    next,
+    vouchers,
+    coachSeen,
+    dismissCoach,
+    experiences,
+    loyaltyBookings,
+  } = useLoyalty();
   const [stripOpen, setStripOpen] = useState(true);
   const [welcomeVoucher, setWelcomeVoucher] = useState<Voucher | null>(null);
 
+  // A random mix of both brands' experiences (max 6) for the home carousel.
+  const homeExperiences = React.useMemo(
+    () => [...experiences].sort(() => Math.random() - 0.5).slice(0, 6),
+    [experiences],
+  );
+
   // Strip only surfaces upcoming bookings (past ones live in My Bookings · Past).
-  const upcomingBookings = LOYALTY_BOOKINGS.filter(b => !b.past);
+  const upcomingBookings = loyaltyBookings.filter(b => !b.past);
 
   const subtitle = next
     ? `${(next.min - points).toLocaleString()} pts to ${next.name}`
@@ -134,7 +146,7 @@ export function LoyaltyHomeScreen({ navigation }: TabScreenProps<'Loyalty'>) {
           </Pressable>
         </View>
         <View style={styles.experiences}>
-          {EXPERIENCES.map(experience => (
+          {homeExperiences.map(experience => (
             <ExperienceCard
               key={experience.id}
               experience={experience}

@@ -2,9 +2,34 @@ import {api, unwrap} from './api';
 import {
   EXPERIENCES,
   POINT_HISTORY,
+  type Experience,
   type LoyaltyBooking,
+  type PointEntry,
   type Voucher,
 } from '../data/loyalty';
+import type {BrandKey} from '../data/menu';
+
+/** Local photo per experience key (the API doesn't ship images). */
+const EXP_PHOTOS: Record<string, ReturnType<typeof require>> = {
+  'x-chefs-table': require('../assets/reservations/branch-dubai-mall.jpg'),
+  'x-private-dining': require('../assets/reservations/branch-yas-island.jpg'),
+  'x-weekend-special': require('../assets/reservations/branch-creek.jpg'),
+};
+const DEFAULT_EXP_PHOTO = require('../assets/reservations/branch-dubai-mall.jpg');
+
+/** Backend list fields can arrive as a JSON string; normalize to string[]. */
+function toList(raw: string[] | string | null | undefined): string[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 type ApiVoucher = {
   id: string; // == voucher_key
@@ -22,14 +47,14 @@ type ApiVoucher = {
 
 type ApiExperience = {
   exp_key: string;
-  brand: string;
-  title: string;
-  location: string;
-  description: string;
-  pts: number;
-  value: string;
-  tags: string[] | null;
-  eligible: boolean;
+  brand: string | null;
+  title: string | null;
+  location: string | null;
+  description: string | null;
+  pts: number | string | null;
+  value: string | null;
+  tags: string[] | string | null;
+  eligible: boolean | null;
   need_more: number | null;
 };
 
@@ -111,6 +136,36 @@ export async function fetchLoyaltyBookings(): Promise<LoyaltyBooking[]> {
   return unwrap<LoyaltyBooking[]>(res);
 }
 
+/** Full experiences catalogue straight from the API (all brands). */
+export async function fetchExperiences(): Promise<Experience[]> {
+  const res = await api.get('/api/app/loyalty/experiences');
+  return unwrap<ApiExperience[]>(res).map(r => ({
+    id: r.exp_key,
+    brand: (r.brand ?? 'Karaz') as BrandKey,
+    title: r.title ?? 'Experience',
+    location: r.location ?? '',
+    desc: r.description ?? '',
+    pts: Number(r.pts ?? 0),
+    value: r.value ?? '',
+    tags: toList(r.tags),
+    eligible: r.eligible ?? false,
+    needMore: r.need_more ?? undefined,
+    photo: EXP_PHOTOS[r.exp_key] ?? DEFAULT_EXP_PHOTO,
+  }));
+}
+
+/** Full point-history transaction list from the API. */
+export async function fetchPointHistory(): Promise<PointEntry[]> {
+  const res = await api.get('/api/app/loyalty/point-history');
+  return unwrap<ApiPointEntry[]>(res).map(r => ({
+    id: r.id,
+    title: r.title,
+    sub: r.sub,
+    delta: r.delta,
+    icon: r.icon,
+  }));
+}
+
 export async function bookExperience(
   key: string,
   payload?: {dateLabel?: string; inDays?: number},
@@ -127,13 +182,13 @@ export async function hydrateExperiences(): Promise<boolean> {
     rows.forEach(r => {
       const target = EXPERIENCES.find(e => e.id === r.exp_key);
       if (!target) return;
-      target.title = r.title;
-      target.location = r.location;
-      target.desc = r.description;
-      target.pts = r.pts;
-      target.value = r.value;
-      target.tags = r.tags ?? target.tags;
-      target.eligible = r.eligible;
+      target.title = r.title ?? target.title;
+      target.location = r.location ?? target.location ?? '';
+      target.desc = r.description ?? target.desc ?? '';
+      target.pts = Number(r.pts ?? target.pts);
+      target.value = r.value ?? target.value ?? '';
+      target.tags = toList(r.tags).length ? toList(r.tags) : target.tags;
+      target.eligible = r.eligible ?? target.eligible;
       target.needMore = r.need_more ?? undefined;
     });
     return true;

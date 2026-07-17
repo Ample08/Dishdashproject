@@ -1,19 +1,29 @@
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {colors, fontFamily} from '../../theme';
-import type {CateringInquiry} from '../../data/catering';
+import {INQUIRY_STATUS_META, type CateringInquiry} from '../../data/catering';
 import {StatusBadge} from './StatusBadge';
 
 /**
  * Inquiry card on My Inquiries (Figma UA5 6522:27438): ref + status badge,
- * event title, date · location meta, and a status footer line — a muted clock
- * for awaiting, a blue envelope for a received response.
+ * event title, date · location meta, and a status-driven footer line. Tapping
+ * it opens the inquiry detail.
  */
-export function InquiryCard({inquiry}: {inquiry: CateringInquiry}) {
-  const awaiting = inquiry.status === 'awaiting';
+export function InquiryCard({
+  inquiry,
+  onPress,
+}: {
+  inquiry: CateringInquiry;
+  onPress?: () => void;
+}) {
+  const meta = INQUIRY_STATUS_META[inquiry.status] ?? INQUIRY_STATUS_META.awaiting;
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}>
       <View style={styles.topRow}>
         <Text style={styles.ref}>{inquiry.id}</Text>
         <StatusBadge status={inquiry.status} />
@@ -25,18 +35,13 @@ export function InquiryCard({inquiry}: {inquiry: CateringInquiry}) {
       </Text>
 
       <View style={styles.noteRow}>
-        <Icon
-          name={awaiting ? 'time-outline' : 'mail-outline'}
-          size={15}
-          color={awaiting ? 'rgba(28,35,48,0.55)' : colors.brand.umabdallah}
-        />
-        <Text style={[styles.note, !awaiting && styles.noteReceived]}>
-          {awaiting
-            ? "We'll reach out within 24 hours."
-            : 'Response received — check your email or WhatsApp.'}
-        </Text>
+        <Icon name={meta.icon} size={15} color={meta.dot} />
+        <Text style={styles.note}>{meta.note}</Text>
+        {onPress ? (
+          <Icon name="chevron-forward" size={16} color={colors.text.tertiary} />
+        ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

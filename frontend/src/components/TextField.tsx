@@ -20,6 +20,7 @@ type Props = {
   onChangeText: (v: string) => void;
   placeholder?: string;
   helper?: string;
+  error?: string;
   trailing?: React.ReactNode;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
@@ -33,6 +34,7 @@ export function TextField({
   onChangeText,
   placeholder,
   helper,
+  error,
   trailing,
   keyboardType,
   autoCapitalize = 'sentences',
@@ -42,7 +44,7 @@ export function TextField({
   const [focused, setFocused] = useState(false);
 
   const field = (
-    <View style={[styles.field, focused && styles.focused]}>
+    <View style={[styles.field, focused && styles.focused, !!error && styles.errored]}>
       <TextInput
         style={styles.input}
         value={value}
@@ -68,7 +70,11 @@ export function TextField({
       ) : (
         field
       )}
-      {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : helper ? (
+        <Text style={styles.helper}>{helper}</Text>
+      ) : null}
     </View>
   );
 }
@@ -99,6 +105,9 @@ const styles = StyleSheet.create({
   focused: {
     borderColor: colors.brand.pistachio,
   },
+  errored: {
+    borderColor: colors.status.error,
+  },
   input: {
     flex: 1,
     padding: 0,
@@ -111,5 +120,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bodyRegular,
     fontSize: 11,
     color: colors.text.tertiary,
+  },
+  errorText: {
+    width: '100%',
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 11,
+    color: colors.status.error,
   },
 });

@@ -26,8 +26,25 @@ type ApiBrand = {
   distance: string;
   address: string;
   prep_time: string;
-  categories: string[] | null;
+  // Backend sends this as a JSON-encoded string, e.g. '["Mezze","Grills"]'.
+  categories: string[] | string | null;
 };
+
+/** Normalize the backend `categories` (JSON string or array) to a string[]. */
+function parseCategories(raw: string[] | string | null): string[] | undefined {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
 
 type ApiMenuItem = {
   slug: string;
@@ -61,8 +78,8 @@ function mapItem(a: ApiMenuItem): MenuItem {
   return {
     id: a.slug,
     brand: a.brand_key,
-    name: a.name,
-    desc: a.description,
+    name: a.name ?? '',
+    desc: a.description ?? '',
     price: Number(a.price),
     oldPrice: a.old_price != null ? Number(a.old_price) : undefined,
     discountPct: a.discount_pct ?? undefined,
@@ -121,7 +138,7 @@ export async function hydrateMenu(): Promise<boolean> {
         distance: b.distance,
         address: b.address,
         prepTime: b.prep_time,
-        categories: b.categories ?? target.categories,
+        categories: parseCategories(b.categories) ?? target.categories,
       };
       Object.assign(target, patch);
     });

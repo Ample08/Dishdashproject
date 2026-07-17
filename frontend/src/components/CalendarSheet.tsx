@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {BottomSheet} from './BottomSheet';
 import {colors, fontFamily} from '../theme';
@@ -73,6 +73,8 @@ export function CalendarSheet({
   subtitle,
   confirmLabel,
   variant = 'default',
+  pickerStyle = 'chips',
+  plain = false,
 }: {
   visible: boolean;
   initial: Date;
@@ -84,10 +86,20 @@ export function CalendarSheet({
   subtitle?: string;
   confirmLabel?: string;
   variant?: 'default' | 'loyalty';
+  /** 'chips' = prev/this/next month chips; 'yearMonth' = tap header to pick
+   *  a year then a month (needed for far-back dates like date of birth). */
+  pickerStyle?: 'chips' | 'yearMonth';
+  /** Plain calendar with no "peak night / sold out" markers or legend —
+   *  for generic date picks (date of birth, catering event date). */
+  plain?: boolean;
 }) {
   const [view, setView] = useState({y: initial.getFullYear(), m: initial.getMonth()});
   const [picked, setPicked] = useState<Date>(initial);
+  const [mode, setMode] = useState<'days' | 'months' | 'years'>('days');
   const loyalty = variant === 'loyalty';
+  const yearMonth = pickerStyle === 'yearMonth' && !loyalty;
+  // Peak-night / sold-out markers + legend only make sense for reservations.
+  const showMarkers = !loyalty && !plain && !yearMonth;
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const min = minDate ? startOfDay(minDate) : undefined;
@@ -97,6 +109,22 @@ export function CalendarSheet({
     const base = new Date(view.y, view.m, 1);
     return [-1, 0, 1].map(offset => addMonths(base, offset));
   }, [view]);
+
+  // Year list for the year/month picker, newest first, bounded by min/max.
+  const years = useMemo(() => {
+    const maxY = max ? max.getFullYear() : today.getFullYear() + 10;
+    const minY = min ? min.getFullYear() : maxY - 100;
+    const out: number[] = [];
+    for (let y = maxY; y >= minY; y--) {
+      out.push(y);
+    }
+    return out;
+  }, [min, max, today]);
+
+  const stepMonth = (dir: number) => {
+    const next = addMonths(new Date(view.y, view.m, 1), dir);
+    setView({y: next.getFullYear(), m: next.getMonth()});
+  };
 
   const first = new Date(view.y, view.m, 1).getDay();
   const days = new Date(view.y, view.m + 1, 0).getDate();
@@ -163,7 +191,101 @@ export function CalendarSheet({
         </View>
         {subtitle && !loyalty ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-        {!loyalty ? (
+        {/* Year/month navigation — tap the label to pick a year, then a month. */}
+        {yearMonth ? (
+          <View style={styles.ymNav}>
+            <Pressable
+              hitSlop={10}
+              onPress={() => stepMonth(-1)}
+              disabled={mode !== 'days'}
+              style={[styles.ymArrow, mode !== 'days' && styles.ymArrowHidden]}
+              accessibilityLabel="Previous month">
+              <Icon name="chevron-back" size={20} color={colors.brand.navy} />
+            </Pressable>
+            <Pressable
+              style={styles.ymLabel}
+              onPress={() => setMode(mode === 'days' ? 'years' : 'days')}
+              accessibilityRole="button">
+              <Text style={styles.ymLabelText}>
+                {mode === 'years'
+                  ? 'Select year'
+                  : mode === 'months'
+                  ? `Select month · ${view.y}`
+                  : `${MONTHS_FULL[view.m]} ${view.y}`}
+              </Text>
+              <Icon
+                name={mode === 'days' ? 'chevron-down' : 'chevron-up'}
+                size={16}
+                color={colors.brand.navy}
+              />
+            </Pressable>
+            <Pressable
+              hitSlop={10}
+              onPress={() => stepMonth(1)}
+              disabled={mode !== 'days'}
+              style={[styles.ymArrow, mode !== 'days' && styles.ymArrowHidden]}
+              accessibilityLabel="Next month">
+              <Icon name="chevron-forward" size={20} color={colors.brand.navy} />
+            </Pressable>
+          </View>
+        ) : null}
+
+        {yearMonth && mode === 'years' ? (
+          <ScrollView style={styles.ymScroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.ymGrid}>
+              {years.map(y => (
+                <Pressable
+                  key={y}
+                  style={[styles.ymCell, y === view.y && styles.ymCellActive]}
+                  onPress={() => {
+                    setView(v => ({...v, y}));
+                    setMode('months');
+                  }}>
+                  <Text style={[styles.ymCellText, y === view.y && styles.ymCellTextActive]}>
+                    {y}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        ) : null}
+
+        {yearMonth && mode === 'months' ? (
+          <View style={styles.ymGrid}>
+            {MONTHS_SHORT.map((mLabel, mIdx) => {
+              const disabled = isMonthDisabled(new Date(view.y, mIdx, 1));
+              return (
+                <Pressable
+                  key={mLabel}
+                  disabled={disabled}
+                  style={[
+                    styles.ymCell,
+                    styles.ymCellMonth,
+                    mIdx === view.m && styles.ymCellActive,
+                    disabled && styles.monthTabDisabled,
+                  ]}
+                  onPress={() => {
+                    setView(v => ({...v, m: mIdx}));
+                    // Keep the picked day valid within the chosen month/year.
+                    const dim = new Date(view.y, mIdx + 1, 0).getDate();
+                    setPicked(new Date(view.y, mIdx, Math.min(picked.getDate(), dim)));
+                    setMode('days');
+                  }}>
+                  <Text
+                    style={[
+                      styles.ymCellText,
+                      mIdx === view.m && styles.ymCellTextActive,
+                      disabled && styles.monthTextDisabled,
+                    ]}>
+                    {mLabel}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {!loyalty && !yearMonth ? (
           <View style={styles.monthTabs}>
             {monthOptions.map(month => {
               const active =
@@ -193,6 +315,8 @@ export function CalendarSheet({
           </View>
         ) : null}
 
+        {!yearMonth || mode === 'days' ? (
+        <>
         <View style={[styles.week, loyalty && styles.loyaltyWeek]}>
           {WEEKDAYS.map(day => (
             <Text key={day} style={[styles.weekday, loyalty && styles.loyaltyWeekday]}>
@@ -238,7 +362,7 @@ export function CalendarSheet({
                     <View style={styles.loyaltySlash} />
                   ) : null}
                   {!loyalty && !isPicked(day) && isToday(day) ? <View style={styles.todayDot} /> : null}
-                  {!loyalty && !isPicked(day) && isPeak(day) && !isDisabled(day) ? (
+                  {showMarkers && !isPicked(day) && isPeak(day) && !isDisabled(day) ? (
                     <View style={styles.peakDot} />
                   ) : null}
                 </Pressable>
@@ -247,16 +371,19 @@ export function CalendarSheet({
           ))}
         </View>
 
-        {!loyalty ? <View style={styles.legend}>
+        {showMarkers ? <View style={styles.legend}>
           <LegendDot color={colors.brand.pistachio} label="Today" />
           <LegendDot color={colors.brand.karaz} label="Peak night" />
           <LegendDot color="#c9c9c9" label="Sold out" />
         </View> : null}
+        </>
+        ) : null}
 
         <Pressable
           style={[styles.confirm, loyalty && styles.loyaltyConfirm]}
           onPress={() => {
             onSelect(picked);
+            setMode('days');
             onClose();
           }}
           accessibilityRole="button">
@@ -338,6 +465,69 @@ const styles = StyleSheet.create({
     marginTop: 22,
     marginBottom: 22,
   },
+  ymNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    marginBottom: 18,
+  },
+  ymArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand.white,
+    borderWidth: 1,
+    borderColor: 'rgba(28,35,48,0.12)',
+  },
+  ymArrowHidden: {opacity: 0},
+  ymLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: colors.brand.white,
+    borderWidth: 1,
+    borderColor: 'rgba(28,35,48,0.12)',
+  },
+  ymLabelText: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 15,
+    color: colors.brand.navy,
+  },
+  ymScroll: {maxHeight: 268, marginBottom: 8},
+  ymGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  ymCell: {
+    width: '22%',
+    flexGrow: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: colors.brand.white,
+    borderWidth: 1,
+    borderColor: 'rgba(28,35,48,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ymCellMonth: {width: '30%'},
+  ymCellActive: {
+    backgroundColor: colors.brand.navy,
+    borderColor: colors.brand.navy,
+  },
+  ymCellText: {
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 15,
+    color: colors.brand.navy,
+  },
+  ymCellTextActive: {color: colors.brand.white},
   monthTab: {
     paddingHorizontal: 16,
     height: 34,

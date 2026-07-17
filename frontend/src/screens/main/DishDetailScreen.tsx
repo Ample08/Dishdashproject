@@ -51,7 +51,7 @@ export function DishDetailScreen({
   const [spice, setSpice] = useState('Medium');
   const [sides, setSides] = useState<string[]>(['Garlic toum (extra)']);
   // Full line count of the description (measured once, unclamped) so the
-  // Read more/less toggle only shows when the text actually overflows 3 lines.
+  // Read more/less toggle only shows when the text actually overflows 4 lines.
   const [descLines, setDescLines] = useState<number | null>(null);
 
   if (!item) {
@@ -116,7 +116,7 @@ export function DishDetailScreen({
 
             <Text
               style={styles.desc}
-              numberOfLines={descLines == null ? undefined : expanded ? undefined : 3}
+              numberOfLines={descLines == null ? undefined : expanded ? undefined : 4}
               onTextLayout={e => {
                 if (descLines == null) {
                   setDescLines(e.nativeEvent.lines.length);
@@ -124,7 +124,7 @@ export function DishDetailScreen({
               }}>
               {item.desc}
             </Text>
-            {descLines != null && descLines > 3 ? (
+            {descLines != null && descLines > 4 ? (
               <Pressable onPress={() => setExpanded(e => !e)} hitSlop={8}>
                 <Text style={styles.readMore}>
                   {expanded ? 'Read less ›' : 'Read more ›'}

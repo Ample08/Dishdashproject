@@ -7,16 +7,17 @@ import React, {
   useState,
 } from 'react';
 import {
-  EXPERIENCES,
-  LOYALTY_BOOKINGS,
   SEED_VOUCHERS,
   nextTier,
   tierForPoints,
   tierProgress,
+  type Experience,
   type LoyaltyBooking,
+  type PointEntry,
   type Tier,
   type Voucher,
 } from '../data/loyalty';
+import Toast from 'react-native-toast-message';
 import {useAuth} from './AuthContext';
 import * as loyaltyApi from '../services/loyaltyService';
 
@@ -39,10 +40,21 @@ type LoyaltyValue = {
   redeemVoucher: (id: string) => void;
   /** Generate the celebration code for a given party size; returns the voucher. */
   generateCelebration: (guests: number) => Voucher;
+  /** Full experiences catalogue from the API (all brands). */
+  experiences: Experience[];
+  /** Point-history transactions from the API. */
+  pointHistory: PointEntry[];
   /** Experience bookings made with points (Loyalty Bookings screen). */
   loyaltyBookings: LoyaltyBooking[];
-  /** Book an experience by id; deducts points and adds to the bookings list. */
-  bookExperience: (experienceId: string) => void;
+  /** True once loyalty lists have been fetched at least once. */
+  loaded: boolean;
+  getExperience: (id: string) => Experience | undefined;
+  /**
+   * Book an experience by id. Checks the balance (SRS §11.3), deducts points,
+   * persists to the backend, and rolls back on failure. Resolves true on
+   * success, false if blocked or the API failed.
+   */
+  bookExperience: (experienceId: string) => Promise<boolean>;
 };
 
 const LoyaltyContext = createContext<LoyaltyValue | null>(null);
@@ -51,13 +63,22 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
   const {token} = useAuth();
   const [points, setPoints] = useState(1550); // Savor member (Figma home)
   const [vouchers, setVouchers] = useState<Voucher[]>(SEED_VOUCHERS);
-  const [loyaltyBookings, setLoyaltyBookings] =
-    useState<LoyaltyBooking[]>(LOYALTY_BOOKINGS);
+  // Real API lists only — no static seed (empty until the API responds).
+  const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [pointHistory, setPointHistory] = useState<PointEntry[]>([]);
+  const [loyaltyBookings, setLoyaltyBookings] = useState<LoyaltyBooking[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [coachSeen, setCoachSeen] = useState(false);
 
-  // Hydrate points, vouchers and point history once signed in.
+  // Hydrate all loyalty data from the API once signed in. Signed out → empty.
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setExperiences([]);
+      setPointHistory([]);
+      setLoyaltyBookings([]);
+      setLoaded(false);
+      return;
+    }
     let cancelled = false;
     loyaltyApi
       .fetchSummary()
@@ -71,13 +92,27 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
         if (!cancelled && list.length) setVouchers(list);
       })
       .catch(() => {});
-    loyaltyApi.hydratePointHistory();
+    loyaltyApi
+      .fetchExperiences()
+      .then(list => {
+        if (!cancelled) setExperiences(list);
+      })
+      .catch(() => {});
+    loyaltyApi
+      .fetchPointHistory()
+      .then(list => {
+        if (!cancelled) setPointHistory(list);
+      })
+      .catch(() => {});
     loyaltyApi
       .fetchLoyaltyBookings()
       .then(list => {
-        if (!cancelled && list.length) setLoyaltyBookings(list);
+        if (!cancelled) setLoyaltyBookings(list);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -119,31 +154,70 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
     return result ?? SEED_VOUCHERS[1];
   }, []);
 
-  const bookExperience = useCallback((experienceId: string) => {
-    const exp = EXPERIENCES.find(e => e.id === experienceId);
-    if (!exp) return;
+  const getExperience = useCallback(
+    (id: string) => experiences.find(e => e.id === id),
+    [experiences],
+  );
 
-    // Optimistic: add the booking + deduct points locally, then persist.
-    const optimistic: LoyaltyBooking = {
-      id: `lb-local-${experienceId}`,
-      brand: exp.brand,
-      title: exp.title,
-      dateLabel: 'Upcoming',
-      location: exp.location,
-      inDays: 7,
-    };
-    setLoyaltyBookings(prev => [optimistic, ...prev]);
-    setPoints(prev => Math.max(0, prev - exp.pts));
+  const bookExperience = useCallback(
+    async (experienceId: string): Promise<boolean> => {
+      const exp = experiences.find(e => e.id === experienceId);
+      if (!exp) return false;
 
-    loyaltyApi
-      .bookExperience(experienceId)
-      .then(saved => {
+      // SRS §11.3 — real-time balance check before spending points.
+      if (points < exp.pts) {
+        Toast.show({
+          type: 'info',
+          text1: 'Not enough points',
+          text2: `You need ${(exp.pts - points).toLocaleString()} more points to book this.`,
+        });
+        return false;
+      }
+
+      // Optimistic: add the booking + deduct points locally, then persist.
+      const optimistic: LoyaltyBooking = {
+        id: `lb-local-${experienceId}`,
+        bookingId: 'PENDING',
+        brand: exp.brand,
+        title: exp.title,
+        dateLabel: 'Upcoming',
+        date: 'Upcoming',
+        time: '',
+        location: exp.location,
+        address: exp.location,
+        guests: 2,
+        points: exp.pts,
+        inDays: 7,
+        status: 'upcoming',
+      };
+      setLoyaltyBookings(prev => [optimistic, ...prev]);
+      setPoints(prev => Math.max(0, prev - exp.pts));
+
+      try {
+        const saved = await loyaltyApi.bookExperience(experienceId);
         setLoyaltyBookings(prev =>
           prev.map(b => (b.id === optimistic.id ? saved : b)),
         );
-      })
-      .catch(() => {});
-  }, []);
+        Toast.show({
+          type: 'success',
+          text1: 'Experience booked',
+          text2: `${exp.pts.toLocaleString()} points redeemed.`,
+        });
+        return true;
+      } catch {
+        // SRS §11.2 step 7 — full rollback, no points deducted.
+        setLoyaltyBookings(prev => prev.filter(b => b.id !== optimistic.id));
+        setPoints(prev => prev + exp.pts);
+        Toast.show({
+          type: 'error',
+          text1: 'Booking failed',
+          text2: 'No points were deducted. Please try again.',
+        });
+        return false;
+      }
+    },
+    [points, experiences],
+  );
 
   const value = useMemo<LoyaltyValue>(
     () => ({
@@ -158,7 +232,11 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
       claimVoucher,
       redeemVoucher,
       generateCelebration,
+      experiences,
+      pointHistory,
       loyaltyBookings,
+      loaded,
+      getExperience,
       bookExperience,
     }),
     [
@@ -170,7 +248,11 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
       claimVoucher,
       redeemVoucher,
       generateCelebration,
+      experiences,
+      pointHistory,
       loyaltyBookings,
+      loaded,
+      getExperience,
       bookExperience,
     ],
   );

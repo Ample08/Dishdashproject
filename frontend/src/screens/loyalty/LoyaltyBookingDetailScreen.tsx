@@ -21,6 +21,7 @@ import {
   type LoyaltyBooking,
 } from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
+import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -45,7 +46,10 @@ function pointsLabel(status: LoyaltyBooking['status']): string {
 export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
   const insets = useSafeAreaInsets();
   const [reviewOpen, setReviewOpen] = useState(false);
-  const booking = bookingById(route.params.bookingId);
+  const {loyaltyBookings} = useLoyalty();
+  const booking =
+    loyaltyBookings.find(b => b.id === route.params.bookingId) ??
+    bookingById(route.params.bookingId);
 
   if (!booking) {
     return (
@@ -57,10 +61,12 @@ export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
     );
   }
 
-  const meta = BOOKING_STATUS_META[booking.status];
+  const location = booking.location?.trim();
+  const address = booking.address?.trim();
+  const branchTitle = [booking.brand, location].filter(Boolean).join(' · ');
 
   const openMaps = () => {
-    const query = encodeURIComponent(`${booking.brand} ${booking.address}`);
+    const query = encodeURIComponent(`${booking.brand} ${address || location || ''}`);
     Linking.openURL(
       `https://www.google.com/maps/search/?api=1&query=${query}`,
     ).catch(() => {});
@@ -83,7 +89,7 @@ export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
         {/* Hero */}
         <Animated.View entering={FadeInDown.duration(380)} style={styles.hero}>
           <Text style={styles.heroBrand}>
-            {booking.brand} · {booking.location}
+            {branchTitle || booking.brand}
           </Text>
           <Text style={styles.heroTitle}>{booking.title}</Text>
           <View style={styles.heroPillRow}>
@@ -157,30 +163,32 @@ export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
         </Animated.View>
 
         {/* Branch card */}
-        <Animated.View
-          entering={FadeInDown.delay(260).duration(380)}
-          style={styles.branchCard}>
-          <View style={styles.branchRow}>
-            <Icon
-              name="location-outline"
-              size={22}
-              color={colors.brand.champagne}
-            />
-            <View style={styles.branchText}>
-              <Text style={styles.branchName}>
-                {booking.brand} · {booking.location}
-              </Text>
-              <Text style={styles.branchAddr}>{booking.address}</Text>
+        {location || address ? (
+          <Animated.View
+            entering={FadeInDown.delay(260).duration(380)}
+            style={styles.branchCard}>
+            <View style={styles.branchRow}>
+              <Icon
+                name="location-outline"
+                size={22}
+                color={colors.brand.champagne}
+              />
+              <View style={styles.branchText}>
+                <Text style={styles.branchName}>
+                  {branchTitle || booking.brand}
+                </Text>
+                {address ? <Text style={styles.branchAddr}>{address}</Text> : null}
+              </View>
             </View>
-          </View>
-          <Pressable
-            style={({pressed}) => [styles.mapsBtn, pressed && styles.pressed]}
-            onPress={openMaps}
-            accessibilityRole="button">
-            <Icon name="map-outline" size={16} color={loyaltyColors.bgall} />
-            <Text style={styles.mapsBtnText}>Open in Google Maps</Text>
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              style={({pressed}) => [styles.mapsBtn, pressed && styles.pressed]}
+              onPress={openMaps}
+              accessibilityRole="button">
+              <Icon name="map-outline" size={16} color={loyaltyColors.bgall} />
+              <Text style={styles.mapsBtnText}>Open in Google Maps</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
 
         {/* Need help */}
         <Animated.View
@@ -199,7 +207,7 @@ export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
         sheetStyle={styles.reviewSheet}>
         <BookingReviewSheet
           brand={booking.brand}
-          location={booking.location}
+          location={location ?? ''}
           onClose={() => setReviewOpen(false)}
         />
       </BottomSheet>
@@ -208,7 +216,7 @@ export function LoyaltyBookingDetailScreen({navigation, route}: Props) {
 }
 
 function StatusPill({status}: {status: LoyaltyBooking['status']}) {
-  const m = BOOKING_STATUS_META[status];
+  const m = BOOKING_STATUS_META[status] ?? BOOKING_STATUS_META.upcoming;
   return (
     <View style={[styles.pill, {backgroundColor: m.tint, borderColor: m.border}]}>
       <View style={[styles.pillDot, {backgroundColor: m.dot}]} />

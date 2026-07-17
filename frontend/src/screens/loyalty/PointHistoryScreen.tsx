@@ -12,7 +12,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
-import {POINT_HISTORY, loyaltyColors} from '../../data/loyalty';
+import {loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
@@ -59,15 +59,15 @@ export function PointHistoryScreen({
   navigation,
 }: RootStackScreenProps<'PointHistory'>) {
   const insets = useSafeAreaInsets();
-  const {points} = useLoyalty();
+  const {points, pointHistory, loaded} = useLoyalty();
   const [filter, setFilter] = useState<Filter>('All');
 
   const rows = useMemo(
     () =>
-      POINT_HISTORY.filter(p =>
+      pointHistory.filter(p =>
         filter === 'Earned' ? p.delta > 0 : filter === 'Spent' ? p.delta < 0 : true,
       ),
-    [filter],
+    [filter, pointHistory],
   );
 
   return (
@@ -131,6 +131,13 @@ export function PointHistoryScreen({
               </Text>
             </View>
           ))}
+          {rows.length === 0 ? (
+            <Text style={styles.empty}>
+              {loaded
+                ? 'No point activity yet. Earn points by ordering or dining in.'
+                : 'Loading your point history…'}
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -188,4 +195,11 @@ const styles = StyleSheet.create({
   delta: {fontFamily: fontFamily.bodyBold, fontSize: 15},
   earned: {color: colors.brand.pistachio},
   spent: {color: colors.brand.champagne},
+  empty: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    paddingVertical: 40,
+  },
 });

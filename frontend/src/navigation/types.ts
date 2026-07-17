@@ -48,6 +48,7 @@ export type RootStackParamList = {
   CateringStep2: undefined;
   CateringSuccess: {inquiryId: string};
   MyCateringInquiries: undefined;
+  CateringInquiryDetail: {inquiryId: string};
 
   // Loyalty flow (29 → 39)
   MyVouchers: undefined;

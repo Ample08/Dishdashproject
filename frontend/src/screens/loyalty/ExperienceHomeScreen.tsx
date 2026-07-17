@@ -13,7 +13,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {ExperienceCard} from '../../components/loyalty/ExperienceCard';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
-import {EXPERIENCES, loyaltyColors} from '../../data/loyalty';
+import {loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
@@ -59,12 +59,13 @@ export function ExperienceHomeScreen({
   navigation,
 }: RootStackScreenProps<'ExperienceHome'>) {
   const insets = useSafeAreaInsets();
-  const {points} = useLoyalty();
+  const {points, experiences: allExperiences, loaded} = useLoyalty();
   const [filter, setFilter] = useState<Filter>('All');
 
   const experiences = useMemo(
-    () => EXPERIENCES.filter(e => (filter === 'All' ? true : e.brand === filter)),
-    [filter],
+    () =>
+      allExperiences.filter(e => (filter === 'All' ? true : e.brand === filter)),
+    [filter, allExperiences],
   );
 
   return (
@@ -128,6 +129,13 @@ export function ExperienceHomeScreen({
               }
             />
           ))}
+          {experiences.length === 0 ? (
+            <Text style={styles.empty}>
+              {loaded
+                ? 'No experiences available right now. Check back soon.'
+                : 'Loading experiences…'}
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -220,4 +228,11 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {color: colors.brand.navy},
   cards: {gap: 12},
+  empty: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    paddingVertical: 40,
+  },
 });

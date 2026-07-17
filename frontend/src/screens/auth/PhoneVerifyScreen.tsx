@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,16 +10,19 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {
   BackButton,
   BottomSheet,
+  ConfirmDialog,
   CountryPickerSheet,
   CreamBackground,
   PhoneField,
   PrimaryButton,
 } from '../../components';
 import {DEFAULT_COUNTRY, type Country} from '../../data/countries';
+import {classifyError, firstValidationMessage} from '../../services/api';
 import {useAuth} from '../../state/AuthContext';
 import {colors, fontFamily} from '../../theme';
 
@@ -41,7 +44,34 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
   const [error, setError] = useState<string | undefined>();
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [countryOpen, setCountryOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [skipOpen, setSkipOpen] = useState(false);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const allowLeave = useRef(false);
   const {requestOtp} = useAuth();
+
+  // Error #14: leaving post-SSO phone verify → confirm the loyalty trade-off
+  // before letting the back gesture / hardware back actually pop the screen.
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', e => {
+      if (allowLeave.current) {
+        return;
+      }
+      e.preventDefault();
+      setSkipOpen(true);
+    });
+    return unsub;
+  }, [navigation]);
+
+  const skipPhone = () => {
+    allowLeave.current = true;
+    setSkipOpen(false);
+    // Skip → continue into profile setup without linking a number.
+    navigation.reset({
+      index: 0,
+      routes: [{name: 'ProfileSetup', params: {sso: true}}],
+    });
+  };
 
   const onChange = (v: string) => {
     setPhone(v);
@@ -58,7 +88,7 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
     }
   };
 
-  const onSend = () => {
+  const onSend = async () => {
     const digits = normalizePhone(phone);
     // UAE numbers are 9 digits after +971; other countries vary, so accept 6–12.
     const valid = country.iso === 'AE' ? digits.length === 9 : digits.length >= 6;
@@ -72,8 +102,33 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
     }
     setError(undefined);
     const fullPhone = `${country.dialCode} ${digits}`;
-    requestOtp(fullPhone).catch(() => {});
+
+    setSending(true);
+    try {
+      await requestOtp(fullPhone);
+    } catch (e: any) {
+      setSending(false);
+      const kind = classifyError(e);
+      if (kind === 'validation') {
+        setError(firstValidationMessage(e) ?? 'Enter a valid phone number.');
+        return;
+      }
+      if (kind === 'conflict') {
+        // Error #2: number already tied to another account.
+        setConflictOpen(true);
+        return;
+      }
+      Toast.show({
+        type: 'info',
+        text1: kind === 'offline' ? "You're offline" : "Couldn't send the code",
+        text2: 'Check your connection and tap Send again.',
+      });
+      return;
+    }
+    setSending(false);
+
     // Post-SSO path → mark from-sso so OTP routes to Profile Setup (SSO).
+    // This is a push (not a pop), so the skip prompt won't fire here.
     navigation.navigate('OTP', {
       phone: fullPhone,
       fromSso: true,
@@ -128,7 +183,11 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
             </View>
 
             <View style={styles.actions}>
-              <PrimaryButton label="Send code on WhatsApp" onPress={onSend} />
+              <PrimaryButton
+                label="Send code on WhatsApp"
+                onPress={onSend}
+                loading={sending}
+              />
 
               <Text style={styles.footnote}>
                 We'll send a 6-digit code to confirm. SMS rates may apply.
@@ -145,6 +204,30 @@ export function PhoneVerifyScreen({navigation, route}: Props) {
           onClose={() => setCountryOpen(false)}
         />
       </BottomSheet>
+
+      {/* Error #2: number already tied to another account. */}
+      <BottomSheet visible={conflictOpen} onClose={() => setConflictOpen(false)}>
+        <Text style={styles.sheetTitle}>Number already linked</Text>
+        <Text style={styles.sheetBody}>
+          This number is already linked to another Flavours account. Use a
+          different number, or sign in with that account instead.
+        </Text>
+        <PrimaryButton
+          label="Try another number"
+          onPress={() => setConflictOpen(false)}
+        />
+      </BottomSheet>
+
+      {/* Error #14: confirm skipping phone verification (loyalty won't link). */}
+      <ConfirmDialog
+        visible={skipOpen}
+        title="Skip phone verification?"
+        message="Your loyalty points and perks won't link to a number until you verify it. You can add it later in Settings."
+        confirmLabel="Skip for now"
+        cancelLabel="Keep verifying"
+        onConfirm={skipPhone}
+        onCancel={() => setSkipOpen(false)}
+      />
     </View>
     </SafeAreaView>
   );
@@ -183,5 +266,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.text.tertiary,
     textAlign: 'center',
+  },
+  sheetTitle: {
+    fontFamily: fontFamily.displayBold,
+    fontSize: 22,
+    color: colors.text.primary,
+    marginBottom: 10,
+  },
+  sheetBody: {
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.text.secondary,
+    marginBottom: 20,
   },
 });

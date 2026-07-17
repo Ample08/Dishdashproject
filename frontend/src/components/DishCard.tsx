@@ -11,6 +11,7 @@ import {Dirham} from './Dirham';
  * variants. Add button / stepper live in the card's bottom row.
  */
 export type Dish = {
+  id?: string;
   name: string;
   desc: string;
   image: ReturnType<typeof require>;
@@ -21,12 +22,39 @@ export type Dish = {
   qty?: number;
 };
 
-export function DishCard({dish}: {dish: Dish}) {
-  const [qty, setQty] = useState(dish.qty ?? 0);
+/**
+ * When cart callbacks are passed the card is fully driven by the cart (Add
+ * actually adds); otherwise it falls back to a local counter (demo cards).
+ */
+export function DishCard({
+  dish,
+  qty: qtyProp,
+  onAdd,
+  onInc,
+  onDec,
+  onPress,
+}: {
+  dish: Dish;
+  qty?: number;
+  onAdd?: () => void;
+  onInc?: () => void;
+  onDec?: () => void;
+  onPress?: () => void;
+}) {
+  const controlled = onAdd != null;
+  const [localQty, setLocalQty] = useState(dish.qty ?? 0);
+  const qty = controlled ? qtyProp ?? 0 : localQty;
+  const addItem = controlled ? onAdd! : () => setLocalQty(1);
+  const incItem = controlled ? onInc ?? (() => {}) : () => setLocalQty(q => q + 1);
+  const decItem = controlled ? onDec ?? (() => {}) : () => setLocalQty(q => q - 1);
   const discounted = dish.oldPrice != null;
 
   return (
-    <View style={[styles.card, dish.soldOut && styles.soldOutCard]}>
+    <Pressable
+      style={[styles.card, dish.soldOut && styles.soldOutCard]}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}>
       <View style={styles.imageWrap}>
         <Image source={dish.image} style={styles.img} resizeMode="cover" />
         {dish.discountPct ? (
@@ -44,7 +72,8 @@ export function DishCard({dish}: {dish: Dish}) {
               key={`name-${dish.name}`}
               entering={FadeInUp.duration(220)}
               style={styles.name}
-              numberOfLines={1}>
+              numberOfLines={2}
+              ellipsizeMode="tail">
               {dish.name}
             </Animated.Text>
           </View>
@@ -53,7 +82,8 @@ export function DishCard({dish}: {dish: Dish}) {
               key={`desc-${dish.desc}`}
               entering={FadeInUp.delay(35).duration(220)}
               style={styles.desc}
-              numberOfLines={2}>
+              numberOfLines={2}
+              ellipsizeMode="tail">
               {dish.desc}
             </Animated.Text>
           </View>
@@ -83,7 +113,7 @@ export function DishCard({dish}: {dish: Dish}) {
             <View style={styles.addSpacer} />
           ) : qty > 0 ? (
             <View style={styles.stepper}>
-              <Pressable onPress={() => setQty(q => q - 1)} hitSlop={6} style={styles.stepBtn}>
+              <Pressable onPress={decItem} hitSlop={6} style={styles.stepBtn}>
                 <Icon
                   name={qty === 1 ? 'trash-outline' : 'remove'}
                   size={15}
@@ -91,18 +121,18 @@ export function DishCard({dish}: {dish: Dish}) {
                 />
               </Pressable>
               <Text style={styles.qty}>{qty}</Text>
-              <Pressable onPress={() => setQty(q => q + 1)} hitSlop={6} style={styles.stepBtn}>
+              <Pressable onPress={incItem} hitSlop={6} style={styles.stepBtn}>
                 <Icon name="add" size={15} color={colors.brand.navy} />
               </Pressable>
             </View>
           ) : (
-            <Pressable style={styles.addBtn} onPress={() => setQty(1)} accessibilityRole="button">
+            <Pressable style={styles.addBtn} onPress={addItem} accessibilityRole="button">
               <Icon name="add" size={20} color={colors.brand.navy} />
             </Pressable>
           )}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

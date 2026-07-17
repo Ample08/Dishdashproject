@@ -5,7 +5,7 @@ import {HomeDashboardScreen} from '../screens/main/HomeDashboardScreen';
 import {OrdersHomeScreen} from '../screens/main/OrdersHomeScreen';
 import {ReservationsHomeScreen} from '../screens/reservation/ReservationsHomeScreen';
 import {LoyaltyHomeScreen} from '../screens/loyalty/LoyaltyHomeScreen';
-import {TabPlaceholderScreen} from '../screens/main/TabPlaceholderScreen';
+import {ProfileHomeScreen} from '../screens/main/ProfileHomeScreen';
 import type {TabParamList} from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -20,7 +20,7 @@ export function TabNavigator() {
       <Tab.Screen name="Orders" component={OrdersHomeScreen} />
       <Tab.Screen name="Loyalty" component={LoyaltyHomeScreen} />
       <Tab.Screen name="Reserve" component={ReservationsHomeScreen} />
-      <Tab.Screen name="Profile" component={TabPlaceholderScreen} />
+      <Tab.Screen name="Profile" component={ProfileHomeScreen} />
     </Tab.Navigator>
   );
 }

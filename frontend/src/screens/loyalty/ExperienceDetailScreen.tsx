@@ -15,7 +15,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import {BottomSheet} from '../../components/BottomSheet';
 import {CalendarSheet} from '../../components/CalendarSheet';
 import {Shimmer} from '../../components/Shimmer';
-import {EXPERIENCES, loyaltyColors} from '../../data/loyalty';
+import {loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
@@ -75,20 +75,43 @@ export function ExperienceDetailScreen({
   route,
 }: RootStackScreenProps<'ExperienceDetail'>) {
   const insets = useSafeAreaInsets();
-  const {bookExperience} = useLoyalty();
-  const exp = EXPERIENCES.find(e => e.id === route.params.experienceId);
+  const {bookExperience, points, getExperience} = useLoyalty();
+  const exp = getExperience(route.params.experienceId);
   const [date, setDate] = useState(0);
   const [time, setTime] = useState(1);
   const [guests, setGuests] = useState(2);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [customDate, setCustomDate] = useState<Date | null>(null);
+  const [booking, setBooking] = useState(false);
+  const [descTruncated, setDescTruncated] = useState(false);
 
   if (!exp) {
     return <View style={styles.root} />;
   }
 
-  const branch = exp.location.split(/Â·|·/).pop()?.trim() ?? exp.location;
+  // SRS §11.3 — eligibility from the backend (falls back to a local balance
+  // check), so the detail CTA matches the "LOCKED / Need X more" list state.
+  const canBook = exp.eligible ?? points >= exp.pts;
+  const shortBy = exp.needMore ?? Math.max(0, exp.pts - points);
+
+  const onConfirmBook = async () => {
+    if (booking) {
+      return;
+    }
+    setBooking(true);
+    const ok = await bookExperience(exp.id);
+    setBooking(false);
+    if (ok) {
+      setConfirmOpen(false);
+      navigation.replace('ExperienceBooked', {experienceId: exp.id});
+    }
+  };
+
+  const expLocation = exp.location ?? '';
+  const branch = expLocation.split(/Â·|·/).pop()?.trim() || expLocation || 'Branch TBC';
+  const displayLocation = expLocation.split(/Â·|·/)[1]?.trim() || expLocation.trim();
+  const desc = exp.desc?.trim();
   const customLabel = customDate
     ? `${WD[customDate.getDay()]} ${customDate.getDate()} ${MON[customDate.getMonth()]} ${customDate.getFullYear()}`
     : '';
@@ -125,8 +148,12 @@ export function ExperienceDetailScreen({
           <Text style={styles.title}>{exp.title}</Text>
           <View style={styles.locationRow}>
             <Text style={styles.brand}>{exp.brand.toLowerCase()}</Text>
-            <Icon name="location-outline" size={13} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.location}>{exp.location.split('·')[1]?.trim()}</Text>
+            {displayLocation ? (
+              <>
+                <Icon name="location-outline" size={13} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.location}>{displayLocation}</Text>
+              </>
+            ) : null}
           </View>
 
           <View style={styles.ptsRow}>
@@ -135,11 +162,20 @@ export function ExperienceDetailScreen({
             <Text style={styles.value}>{exp.value}</Text>
           </View>
 
-          <Text style={styles.desc} numberOfLines={3}>{exp.desc}</Text>
-          <Text style={styles.readMore}>Read more ›</Text>
+          {desc ? (
+            <>
+              <Text
+                style={styles.desc}
+                numberOfLines={3}
+                onTextLayout={e => setDescTruncated(e.nativeEvent.lines.length > 3)}>
+                {desc}
+              </Text>
+              {descTruncated ? <Text style={styles.readMore}>Read more ›</Text> : null}
+            </>
+          ) : null}
 
           <View style={styles.tags}>
-            {exp.tags.map(t => (
+            {(exp.tags ?? []).map(t => (
               <View key={t} style={styles.tag}>
                 <Text style={styles.tagText}>{t}</Text>
               </View>
@@ -225,7 +261,9 @@ export function ExperienceDetailScreen({
               <Text style={styles.totalValue}>{exp.pts} pts · {exp.value}</Text>
             </View>
             <View style={styles.balancePill}>
-              <Text style={styles.balanceText}>You have 1,250</Text>
+              <Text style={styles.balanceText}>
+                You have {points.toLocaleString()}
+              </Text>
             </View>
           </View>
         </View>
@@ -233,18 +271,17 @@ export function ExperienceDetailScreen({
 
       <View style={[styles.footer, {paddingBottom: insets.bottom + 12}]}>
         <Pressable
-          style={styles.cta}
-<<<<<<< HEAD
-          onPress={() => {
-            bookExperience(exp.id);
-            navigation.replace('ExperienceBooked', {experienceId: exp.id});
-          }}
-=======
+
+          style={[styles.cta, !canBook && styles.ctaDisabled]}
           onPress={() => setConfirmOpen(true)}
->>>>>>> fac1606450bc6042e910ffbe7f2657c8e26be969
+          disabled={!canBook}
           accessibilityRole="button">
-          <Shimmer />
-          <Text style={styles.ctaText}>Book with {exp.pts} pts</Text>
+          {canBook ? <Shimmer /> : null}
+          <Text style={styles.ctaText}>
+            {canBook
+              ? `Book with ${exp.pts} pts`
+              : `Need ${shortBy.toLocaleString()} more pts`}
+          </Text>
         </Pressable>
       </View>
 
@@ -275,9 +312,12 @@ export function ExperienceDetailScreen({
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
           <Pressable
-            style={styles.confirmBtn}
-            onPress={() => navigation.replace('ExperienceBooked', {experienceId: exp.id})}>
-            <Text style={styles.confirmText}>Confirm & Book</Text>
+            style={[styles.confirmBtn, booking && styles.ctaDisabled]}
+            onPress={onConfirmBook}
+            disabled={booking}>
+            <Text style={styles.confirmText}>
+              {booking ? 'Booking…' : 'Confirm & Book'}
+            </Text>
           </Pressable>
         </View>
       </BottomSheet>
@@ -465,6 +505,7 @@ const styles = StyleSheet.create({
 
   footer: {position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 24, paddingTop: 10, backgroundColor: loyaltyColors.bgTop},
   cta: {height: 54, borderRadius: 999, backgroundColor: colors.brand.pistachio, alignItems: 'center', justifyContent: 'center', overflow: 'hidden'},
+  ctaDisabled: {opacity: 0.5},
   ctaText: {fontFamily: fontFamily.bodyBold, fontSize: 15, color: colors.brand.navy},
   confirmSheet: {
     backgroundColor: '#123f49',

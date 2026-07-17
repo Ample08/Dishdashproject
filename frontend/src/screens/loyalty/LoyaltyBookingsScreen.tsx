@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+﻿import React, {useState} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,22 +10,18 @@ import {
 import Animated, {Easing, FadeInLeft, FadeInRight} from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LoyaltyHeader} from '../../components/loyalty/LoyaltyHeader';
-<<<<<<< HEAD
-import {loyaltyColors} from '../../data/loyalty';
-=======
+
 import {
   BOOKING_STATUS_META,
-  LOYALTY_BOOKINGS,
   loyaltyColors,
 } from '../../data/loyalty';
->>>>>>> fac1606450bc6042e910ffbe7f2657c8e26be969
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
 import {colors, fontFamily} from '../../theme';
 
 type Tab = 'Upcoming' | 'Past';
 
-/** 37 · My Bookings (Figma 3772:6) — experience bookings, upcoming/past. */
+/** 37 Â· My Bookings (Figma 3772:6) â€” experience bookings, upcoming/past. */
 export function LoyaltyBookingsScreen({
   navigation,
 }: RootStackScreenProps<'LoyaltyBookings'>) {
@@ -64,7 +60,9 @@ export function LoyaltyBookingsScreen({
           <Text style={styles.empty}>No {tab.toLowerCase()} bookings.</Text>
         ) : (
           visible.map(b => {
-            const sm = BOOKING_STATUS_META[b.status];
+            const sm =
+              BOOKING_STATUS_META[b.status] ?? BOOKING_STATUS_META.upcoming;
+            const location = b.location?.trim();
             return (
               <View key={`${tab}-${b.id}`} style={styles.cardShell}>
                 <Pressable
@@ -75,7 +73,7 @@ export function LoyaltyBookingsScreen({
                     })
                   }
                   accessibilityRole="button"
-                  accessibilityLabel={`${b.title}, ${sm.label.toLowerCase()}`}>
+                  accessibilityLabel={`${b.title ?? 'Booking'}, ${sm.label.toLowerCase()}`}>
                   <Animated.View
                     key={`${tab}-${b.id}-content`}
                     entering={(tab === 'Past' ? FadeInRight : FadeInLeft)
@@ -100,9 +98,10 @@ export function LoyaltyBookingsScreen({
                       </View>
                     )}
                   </View>
-                  <Text style={styles.title}>{b.title}</Text>
+                  <Text style={styles.title}>{b.title ?? 'Experience booking'}</Text>
                   <Text style={styles.meta}>
-                    {b.dateLabel} · {b.location}
+                    {b.dateLabel ?? 'Date TBC'}
+                    {location ? ` · ${location}` : ''}
                   </Text>
                   </Animated.View>
                 </Pressable>

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import type { RootStackScreenProps } from '../../navigation/types';
 import {
-  BackButton,
   CalendarSheet,
   Checkbox,
   CreamBackground,
@@ -27,7 +26,9 @@ import {
 import { colors, fontFamily } from '../../theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../state/AuthContext';
+import {apiErrorMessage, firstValidationMessage} from '../../services/api';
 /**
  * Profile Setup (Figma 847:92)
  * Fixed header (back + progress) over a scrolling form: avatar, name/email/DOB,
@@ -40,11 +41,33 @@ const PROGRESS = 220 / 334; // exact fill ratio from the design
 const TODAY = new Date();
 // Default the DOB calendar to a sensible adult birth year rather than today.
 const DOB_DEFAULT = new Date(TODAY.getFullYear() - 25, 0, 1);
+// Registration rules (Module 1 Â· 4.1): 13+ years old, 100-year lower bound.
+const MIN_AGE = 13;
+const MAX_DOB = new Date(TODAY.getFullYear() - MIN_AGE, TODAY.getMonth(), TODAY.getDate());
+const MIN_DOB = new Date(TODAY.getFullYear() - 100, 0, 1);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Whole years between a birth date and today. */
+function ageOf(d: Date): number {
+  let age = TODAY.getFullYear() - d.getFullYear();
+  const m = TODAY.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && TODAY.getDate() < d.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
 
 const formatDob = (d: Date) => {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   return `${dd} / ${mm} / ${d.getFullYear()}`;
+};
+
+/** Backend `dob` wants an ISO date string (YYYY-MM-DD). */
+const toIsoDate = (d: Date) => {
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 };
 
 export function ProfileSetupScreen({ navigation, route }: Props) {
@@ -69,21 +92,85 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
+  const [errors, setErrors] = useState<{
+    name?: string;
+    email?: string;
+    dob?: string;
+    api?: string;
+  }>({});
+  const [submitting, setSubmitting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const referralInputRef = useRef<TextInput>(null);
   const { updateProfile } = useAuth();
 
-  // Save the profile, then continue to the permission primers. The save is
-  // best-effort: if the API is unreachable we still move the user forward.
-  const finish = () => {
-    const name = `${firstName} ${lastName}`.trim();
-    const patch: { name?: string; email?: string } = {};
-    if (name) patch.name = name;
-    if (email.trim()) patch.email = email.trim();
-    if (patch.name || patch.email) {
-      updateProfile(patch).catch(() => {});
+  // Registration validation (Module 1 Â· 4.1): full name 2â€“50 chars, valid
+  // email, and a date of birth that makes the user at least 13.
+  const validate = (): boolean => {
+    const fullName = `${firstName} ${lastName}`.trim();
+    const next: {name?: string; email?: string; dob?: string; api?: string} = {};
+    if (fullName.length < 2) {
+      next.name = 'Enter your full name (at least 2 characters).';
+    } else if (fullName.length > 50) {
+      next.name = 'Name must be 50 characters or less.';
     }
-    navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
+    if (!email.trim()) {
+      next.email = 'Email is required.';
+    } else if (!EMAIL_RE.test(email.trim())) {
+      next.email = 'Enter a valid email address.';
+    }
+    if (!dob) {
+      next.dob = 'Date of birth is required.';
+    } else if (ageOf(dob) < MIN_AGE) {
+      next.dob = `You must be at least ${MIN_AGE} years old.`;
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  // Save the profile, then continue only after the API accepts it.
+  const finish = async () => {
+    if (submitting) {
+      return;
+    }
+    if (!validate()) {
+      scrollRef.current?.scrollTo({y: 0, animated: true});
+      return;
+    }
+    const fullName = `${firstName} ${lastName}`.trim();
+    // Send both the display `name` (used by the Home greeting) and the
+    // structured fields the backend stores (first/last/dob/opt-in/referral).
+    const patch: Parameters<typeof updateProfile>[0] = {
+      marketing_opt_in: optIn,
+    };
+    if (fullName) patch.name = fullName;
+    if (firstName.trim()) patch.first_name = firstName.trim();
+    if (lastName.trim()) patch.last_name = lastName.trim();
+    if (email.trim()) patch.email = email.trim();
+    if (dob) patch.dob = toIsoDate(dob);
+    if (referral.trim()) patch.referral_code = referral.trim();
+
+    setSubmitting(true);
+    setErrors({});
+    console.log('[Registration] profile update payload:', patch);
+    try {
+      const updated = await updateProfile(patch);
+      console.log('[Registration] profile update success:', updated);
+      navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
+    } catch (error) {
+      console.log('[Registration] profile update failed:', error);
+      const message =
+        firstValidationMessage(error) ??
+        apiErrorMessage(error, 'Could not update your profile. Please try again.');
+      setErrors(e => ({...e, api: message}));
+      Toast.show({
+        type: 'error',
+        text1: 'Profile update failed',
+        text2: message,
+      });
+      scrollRef.current?.scrollTo({y: 0, animated: true});
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const applyReferral = () => {
@@ -144,6 +231,12 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
                 ? "We grabbed these from your account — tweak anything that's off."
                 : 'Tell us a bit about yourself so we can personalise your visits.'}
             </Text>
+            {errors.api ? (
+              <View style={styles.apiError}>
+                <Icon name="alert-circle-outline" size={16} color={colors.status.error} />
+                <Text style={styles.apiErrorText}>{errors.api}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Avatar */}
@@ -161,11 +254,11 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
                     style={styles.avatarImage}
                   />
                 ) : (
-                  <Text style={styles.avatarGlyph}>👤</Text>
+                  <Text style={styles.avatarGlyph}>{'\u{1F464}'}</Text>
                 )}
               </View>
               <View style={styles.editBadge}>
-                <Text style={styles.editGlyph}>✎</Text>
+                <Text style={styles.editGlyph}>{'\u270E'}</Text>
               </View>
             </Pressable>
           </View>
@@ -173,24 +266,35 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
           <TextField
             label="First name"
             value={firstName}
-            onChangeText={setFirstName}
+            onChangeText={v => {
+              setFirstName(v);
+              if (errors.name || errors.api) setErrors(e => ({...e, name: undefined, api: undefined}));
+            }}
             placeholder="Enter first name"
             autoCapitalize="words"
+            error={errors.name}
           />
           <TextField
             label="Last name"
             value={lastName}
-            onChangeText={setLastName}
+            onChangeText={v => {
+              setLastName(v);
+              if (errors.name || errors.api) setErrors(e => ({...e, name: undefined, api: undefined}));
+            }}
             placeholder="Enter last name"
             autoCapitalize="words"
           />
           <TextField
             label="Email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={v => {
+              setEmail(v);
+              if (errors.email || errors.api) setErrors(e => ({...e, email: undefined, api: undefined}));
+            }}
             placeholder="name@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
+            error={errors.email}
           />
           {/* <TextField
             label="Date of birth"
@@ -198,8 +302,8 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
             onChangeText={() => {}}
             onPress={() => setCalendarOpen(true)}
             placeholder="DD / MM / YYYY"
-            helper="Required · we send a treat on your birthday 🎂"
-            trailing={<Text style={styles.cake}>🎂</Text>}
+            helper={`Required · we send a treat on your birthday ${'\u{1F382}'}`}
+            trailing={<Text style={styles.cake}>{'\u{1F382}'}</Text>}
           /> */}
           <Pressable onPress={() => setCalendarOpen(true)}>
             <View pointerEvents="none">
@@ -208,8 +312,9 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
                 value={dob ? formatDob(dob) : ''}
                 onChangeText={() => {}}
                 placeholder="DD / MM / YYYY"
-                helper="Required · we send a treat on your birthday 🎂"
-                trailing={<Text style={styles.cake}>🎂</Text>}
+                helper={`Required · we send a treat on your birthday ${'\u{1F382}'}`}
+                error={errors.dob}
+                trailing={<Text style={styles.cake}>{'\u{1F382}'}</Text>}
               />
             </View>
           </Pressable>
@@ -271,9 +376,9 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
             ) : null}
           </View>
 
-          <PrimaryButton label="Continue" onPress={finish} />
+          <PrimaryButton label="Continue" onPress={finish} loading={submitting} disabled={submitting} />
 
-          <Pressable style={styles.skip} onPress={finish}>
+          <Pressable style={styles.skip} onPress={finish} disabled={submitting}>
             <Text style={styles.skipText}>Skip for now</Text>
           </Pressable>
         </ScrollView>
@@ -282,10 +387,16 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
       <CalendarSheet
         visible={calendarOpen}
         initial={dob ?? DOB_DEFAULT}
-        maxDate={TODAY}
+        minDate={MIN_DOB}
+        maxDate={MAX_DOB}
+        pickerStyle="yearMonth"
+        title="Your date of birth"
         confirmLabel="Set date of birth"
         onClose={() => setCalendarOpen(false)}
-        onSelect={setDob}
+        onSelect={d => {
+          setDob(d);
+          if (errors.dob || errors.api) setErrors(e => ({...e, dob: undefined, api: undefined}));
+        }}
       />
 
       <ImagePickerSheet
@@ -335,6 +446,24 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bodyRegular,
     fontSize: 13,
     color: colors.text.secondary,
+  },
+  apiError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(190,45,45,0.22)',
+    backgroundColor: 'rgba(190,45,45,0.08)',
+  },
+  apiErrorText: {
+    flex: 1,
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: 12,
+    color: colors.status.error,
   },
   avatarWrap: {
     width: '100%',

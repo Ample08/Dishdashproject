@@ -57,3 +57,11 @@ export async function createInquiry(
   const res = await api.post('/api/app/catering/inquiries', input);
   return mapInquiry(unwrap<ApiInquiry>(res));
 }
+
+/** Fetch a single inquiry by its reference (GET /catering/inquiries/{ref}). */
+export async function fetchInquiry(ref: string): Promise<CateringInquiry> {
+  const res = await api.get(
+    `/api/app/catering/inquiries/${encodeURIComponent(ref)}`,
+  );
+  return mapInquiry(unwrap<ApiInquiry>(res));
+}

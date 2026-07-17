@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {
+  Linking,
   Pressable,
   ScrollView,
   StatusBar,
@@ -57,6 +58,8 @@ const CANCEL_REASONS = [
   {title: 'Something else', sub: 'Your feedback helps us improve at Flavours.'},
 ];
 
+const BRANCH_PHONE = '+97180034743274';
+
 /**
  * 46 · Booking Detail (Figma 4582:6 / 4724:6622) — full booking with status
  * banner, Directions/Call, and Modify/Cancel (or Rebook once past/cancelled).
@@ -97,6 +100,15 @@ export function BookingDetailScreen({
     navigation.navigate('NewReservation');
   };
 
+  const openDirections = () => {
+    const query = encodeURIComponent(`${booking.restaurant} ${booking.branchName} UAE`);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {});
+  };
+
+  const callBranch = () => {
+    Linking.openURL(`tel:${BRANCH_PHONE}`).catch(() => {});
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
@@ -134,8 +146,8 @@ export function BookingDetailScreen({
         </View>
 
         <View style={styles.actions}>
-          <ActionButton icon="navigate-outline" label="Directions" />
-          <ActionButton icon="call-outline" label="Call" />
+          <ActionButton icon="navigate-outline" label="Directions" onPress={openDirections} />
+          <ActionButton icon="call-outline" label="Call" onPress={callBranch} />
         </View>
 
         {isUpcoming && (
@@ -219,9 +231,21 @@ export function BookingDetailScreen({
   );
 }
 
-function ActionButton({icon, label}: {icon: string; label: string}) {
+function ActionButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable style={styles.action} accessibilityRole="button" accessibilityLabel={label}>
+    <Pressable
+      style={styles.action}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
       <Icon name={icon} size={20} color={colors.brand.navy} />
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>

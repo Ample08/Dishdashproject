@@ -12,7 +12,9 @@ import {
   requestOtp as apiRequestOtp,
   verifyOtp as apiVerifyOtp,
   updateProfile as apiUpdateProfile,
+  getProfile as apiGetProfile,
   type ApiUser,
+  type ProfilePatch,
 } from '../services/authService';
 import {hydrateMenu} from '../services/menuService';
 import {hydrateBranches} from '../services/reservationService';
@@ -31,11 +33,9 @@ type AuthValue = {
     phone: string,
     code: string,
   ) => Promise<{isNewUser: boolean; user: ApiUser}>;
-  updateProfile: (patch: {
-    name?: string;
-    email?: string;
-    phone?: string;
-  }) => Promise<ApiUser>;
+  updateProfile: (patch: ProfilePatch) => Promise<ApiUser>;
+  /** Re-fetch the signed-in user's profile from the backend. */
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -60,6 +60,16 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
         }
         if (savedUser) {
           setUser(JSON.parse(savedUser));
+        }
+        // With a restored session, pull the latest profile so the Home
+        // greeting / details reflect the server (name, email, points, etc.).
+        if (savedToken) {
+          apiGetProfile()
+            .then(fresh => {
+              setUser(fresh);
+              AsyncStorage.setItem(USER_KEY, JSON.stringify(fresh));
+            })
+            .catch(() => {});
         }
       } catch {
         // ignore — start unauthenticated
@@ -86,7 +96,7 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
   }, []);
 
   const updateProfile = useCallback(
-    async (patch: {name?: string; email?: string; phone?: string}) => {
+    async (patch: ProfilePatch) => {
       const updated = await apiUpdateProfile(patch);
       setUser(updated);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
@@ -94,6 +104,16 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
     },
     [],
   );
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const fresh = await apiGetProfile();
+      setUser(fresh);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(fresh));
+    } catch {
+      // keep the cached user on failure
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
     setAuthToken(null);
@@ -112,9 +132,19 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
       requestOtp,
       verifyOtp,
       updateProfile,
+      refreshProfile,
       signOut,
     }),
-    [ready, token, user, requestOtp, verifyOtp, updateProfile, signOut],
+    [
+      ready,
+      token,
+      user,
+      requestOtp,
+      verifyOtp,
+      updateProfile,
+      refreshProfile,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Toast from 'react-native-toast-message';
 import {Dirham} from '../../components/Dirham';
 import {Shimmer} from '../../components/Shimmer';
 import {BRANDS} from '../../data/menu';
@@ -44,18 +45,22 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
   const total = subtotal + SERVICE_FEE + vat;
   const totalLabel = total.toFixed(2);
 
+  // Recap reflects the actual cart's brand/branch; points earn at 5 AED = 1 pt.
+  const brandKey = lines[0]?.brand ?? 'Karaz';
+  const brandInfo = BRANDS[brandKey];
+  const pointsEarned = Math.max(0, Math.floor(subtotal / 5));
+
   const onPay = async () => {
     if (paying) {
       return;
     }
-    const brandKey = lines[0]?.brand ?? 'Karaz';
 
     setPaying(true);
     try {
       // Create the order on the backend (recomputes totals server-side).
       const order = await createOrder({
         brand: brandKey,
-        branch: BRANDS[brandKey].branch,
+        branch: brandInfo.branch,
         paymentMethod: method,
         items: lines.map(l => ({
           slug: l.id,
@@ -64,15 +69,26 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
           price: l.price,
         })),
       });
+      console.log('[Order] placed on backend:', order.id);
       startOrder(order);
+      Toast.show({
+        type: 'success',
+        text1: 'Order placed successfully',
+        text2: `Ref ${order.id} · we'll start preparing it.`,
+      });
     } catch {
       // Offline / not signed in → fall back to a local demo order.
       placeOrder({
         brand: brandKey,
-        branch: BRANDS[brandKey].branch,
+        branch: brandInfo.branch,
         itemCount: count,
         total,
         items: lines.map(l => ({qty: l.qty, name: l.name, price: l.price})),
+      });
+      Toast.show({
+        type: 'info',
+        text1: 'Order placed offline',
+        text2: "We'll sync it once you're back online.",
       });
     } finally {
       setPaying(false);
@@ -104,9 +120,9 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
         contentContainerStyle={styles.scroll}>
         {/* Order recap */}
         <View style={styles.recap}>
-          <Text style={styles.recapBrand}>Karaz</Text>
+          <Text style={styles.recapBrand}>{brandInfo.name}</Text>
           <View style={styles.dot} />
-          <Text style={styles.recapMuted}>Dubai Mall</Text>
+          <Text style={styles.recapMuted}>{brandInfo.branch}</Text>
           <View style={styles.dot} />
           <Text style={styles.recapMuted}>{count} items</Text>
           <View style={styles.dot} />
@@ -124,7 +140,7 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
         
           <Coin size={16}  />
           <Text style={styles.earnText}>
-            Earn <Text style={styles.earnBold}>+12 pts</Text> on this order
+            Earn <Text style={styles.earnBold}>+{pointsEarned} pts</Text> on this order
           </Text>
         </View>
 
