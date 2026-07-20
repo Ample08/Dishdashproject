@@ -17,6 +17,7 @@ import {BRANDS} from '../../data/menu';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useCart} from '../../state/CartContext';
 import {useOrders} from '../../state/OrderContext';
+import {useProfileGate} from '../../state/useProfileGate';
 import {createOrder} from '../../services/orderService';
 import {colors, fontFamily, radius} from '../../theme';
 import { Coin } from '../../components';
@@ -36,7 +37,8 @@ const VAT_RATE = 0.05;
 export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
   const insets = useSafeAreaInsets();
   const {subtotal, count, lines} = useCart();
-  const {placeOrder, startOrder} = useOrders();
+  const {startOrder} = useOrders();
+  const requireProfile = useProfileGate();
   const [method, setMethod] = useState<Method>('card');
   const [saveCard, setSaveCard] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -50,7 +52,7 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
   const brandInfo = BRANDS[brandKey];
   const pointsEarned = Math.max(0, Math.floor(subtotal / 5));
 
-  const onPay = async () => {
+  const placeOrder = async () => {
     if (paying) {
       return;
     }
@@ -69,33 +71,32 @@ export function PaymentScreen({navigation}: RootStackScreenProps<'Payment'>) {
           price: l.price,
         })),
       });
-      console.log('[Order] placed on backend:', order.id);
       startOrder(order);
       Toast.show({
         type: 'success',
         text1: 'Order placed successfully',
         text2: `Ref ${order.id} · we'll start preparing it.`,
       });
+      navigation.navigate('OrderSuccess');
     } catch {
-      // Offline / not signed in → fall back to a local demo order.
-      placeOrder({
-        brand: brandKey,
-        branch: brandInfo.branch,
-        itemCount: count,
-        total,
-        items: lines.map(l => ({qty: l.qty, name: l.name, price: l.price})),
-      });
+      // Surface the failure — the order was NOT placed. Stay on this screen.
       Toast.show({
-        type: 'info',
-        text1: 'Order placed offline',
-        text2: "We'll sync it once you're back online.",
+        type: 'error',
+        text1: 'Payment failed',
+        text2: 'We couldn’t place your order. Please try again.',
       });
     } finally {
       setPaying(false);
     }
-
-    navigation.navigate('OrderSuccess');
   };
+
+  // Backstop gate — Cart blocks this earlier, but a guest can still land here
+  // via a deep link or back-stack, and an order needs a real customer on it.
+  const onPay = () =>
+    requireProfile(
+      placeOrder,
+      'Add your name, email and date of birth to place an order.',
+    );
 
   return (
     <View style={styles.root}>

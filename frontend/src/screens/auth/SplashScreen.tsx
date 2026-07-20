@@ -3,7 +3,10 @@ import {StatusBar, StyleSheet, View} from 'react-native';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {RootStackScreenProps} from '../../navigation/types';
-import {isProfileComplete} from '../../services/authService';
+import {
+  isProfileComplete,
+  PROFILE_SKIPPED_KEY,
+} from '../../services/authService';
 import {colors} from '../../theme';
 
 /**
@@ -34,13 +37,19 @@ export function SplashScreen({navigation}: Props) {
 
     // Route based on the saved session: no token → Sign In; token but the
     // registration was never finished → Profile Setup; otherwise → Home.
+    // If the user chose "Skip for now" we honour that and let them into the
+    // app — ordering / booking / loyalty gate on the profile at that point.
     let target: 'SignIn' | 'MainTabs' | 'ProfileSetup' = 'SignIn';
     try {
       const token = await AsyncStorage.getItem(TOKEN_KEY);
       if (token) {
-        const raw = await AsyncStorage.getItem(USER_KEY);
+        const [raw, skipped] = await Promise.all([
+          AsyncStorage.getItem(USER_KEY),
+          AsyncStorage.getItem(PROFILE_SKIPPED_KEY),
+        ]);
         const user = raw ? JSON.parse(raw) : null;
-        target = isProfileComplete(user) ? 'MainTabs' : 'ProfileSetup';
+        target =
+          isProfileComplete(user) || skipped === '1' ? 'MainTabs' : 'ProfileSetup';
       }
     } catch {
       target = 'SignIn';

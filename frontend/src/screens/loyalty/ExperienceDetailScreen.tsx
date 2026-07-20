@@ -18,6 +18,7 @@ import {Shimmer} from '../../components/Shimmer';
 import {loyaltyColors} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
+import {useProfileGate} from '../../state/useProfileGate';
 import {colors, fontFamily} from '../../theme';
 
 const DATES = ['Sat 6 Jun', 'Sun 7 Jun', 'Sat 13 Jun', 'Sun 20 Jun'];
@@ -76,6 +77,7 @@ export function ExperienceDetailScreen({
 }: RootStackScreenProps<'ExperienceDetail'>) {
   const insets = useSafeAreaInsets();
   const {bookExperience, points, getExperience} = useLoyalty();
+  const requireProfile = useProfileGate();
   const exp = getExperience(route.params.experienceId);
   const [date, setDate] = useState(0);
   const [time, setTime] = useState(1);
@@ -95,18 +97,19 @@ export function ExperienceDetailScreen({
   const canBook = exp.eligible ?? points >= exp.pts;
   const shortBy = exp.needMore ?? Math.max(0, exp.pts - points);
 
-  const onConfirmBook = async () => {
-    if (booking) {
-      return;
-    }
-    setBooking(true);
-    const ok = await bookExperience(exp.id);
-    setBooking(false);
-    if (ok) {
-      setConfirmOpen(false);
-      navigation.replace('ExperienceBooked', {experienceId: exp.id});
-    }
-  };
+  const onConfirmBook = () =>
+    requireProfile(async () => {
+      if (booking) {
+        return;
+      }
+      setBooking(true);
+      const ok = await bookExperience(exp.id);
+      setBooking(false);
+      if (ok) {
+        setConfirmOpen(false);
+        navigation.replace('ExperienceBooked', {experienceId: exp.id});
+      }
+    }, 'Add your name, email and date of birth to book an experience.');
 
   const expLocation = exp.location ?? '';
   const branch = expLocation.split(/Â·|·/).pop()?.trim() || expLocation || 'Branch TBC';

@@ -7,7 +7,6 @@ import React, {
   useState,
 } from 'react';
 import {
-  SEED_VOUCHERS,
   nextTier,
   tierForPoints,
   tierProgress,
@@ -38,8 +37,8 @@ type LoyaltyValue = {
   claimVoucher: (id: string) => void;
   /** Mark a voucher as used (redeemed) — moves it to the "Used" tab. */
   redeemVoucher: (id: string) => void;
-  /** Generate the celebration code for a given party size; returns the voucher. */
-  generateCelebration: (guests: number) => Voucher;
+  /** Generate the celebration code for a given party size via the API; null on failure. */
+  generateCelebration: (guests: number) => Promise<Voucher | null>;
   /** Full experiences catalogue from the API (all brands). */
   experiences: Experience[];
   /** Point-history transactions from the API. */
@@ -61,9 +60,9 @@ const LoyaltyContext = createContext<LoyaltyValue | null>(null);
 
 export function LoyaltyProvider({children}: {children: React.ReactNode}) {
   const {token} = useAuth();
-  const [points, setPoints] = useState(1550); // Savor member (Figma home)
-  const [vouchers, setVouchers] = useState<Voucher[]>(SEED_VOUCHERS);
-  // Real API lists only — no static seed (empty until the API responds).
+  // Real API data only — no static seed (0 / empty until the API responds).
+  const [points, setPoints] = useState(0);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [pointHistory, setPointHistory] = useState<PointEntry[]>([]);
   const [loyaltyBookings, setLoyaltyBookings] = useState<LoyaltyBooking[]>([]);
@@ -73,6 +72,8 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
   // Hydrate all loyalty data from the API once signed in. Signed out → empty.
   useEffect(() => {
     if (!token) {
+      setPoints(0);
+      setVouchers([]);
       setExperiences([]);
       setPointHistory([]);
       setLoyaltyBookings([]);
@@ -89,7 +90,7 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
     loyaltyApi
       .fetchVouchers()
       .then(list => {
-        if (!cancelled && list.length) setVouchers(list);
+        if (!cancelled) setVouchers(list);
       })
       .catch(() => {});
     loyaltyApi
@@ -139,20 +140,30 @@ export function LoyaltyProvider({children}: {children: React.ReactNode}) {
     loyaltyApi.redeemVoucher(id).catch(() => {});
   }, []);
 
-  const generateCelebration = useCallback((guests: number): Voucher => {
-    let result: Voucher | undefined;
-    setVouchers(prev =>
-      prev.map(v => {
-        if (v.kind === 'celebration') {
-          result = {...v, status: 'claimed', guests};
-          return result;
-        }
-        return v;
-      }),
-    );
-    loyaltyApi.generateCelebration(guests).catch(() => {});
-    return result ?? SEED_VOUCHERS[1];
-  }, []);
+  const generateCelebration = useCallback(
+    async (guests: number): Promise<Voucher | null> => {
+      try {
+        const saved = await loyaltyApi.generateCelebration(guests);
+        // Insert or replace the celebration voucher with the server record
+        // (real code from the backend).
+        setVouchers(prev => {
+          const exists = prev.some(v => v.id === saved.id);
+          return exists
+            ? prev.map(v => (v.id === saved.id ? saved : v))
+            : [saved, ...prev];
+        });
+        return saved;
+      } catch {
+        Toast.show({
+          type: 'error',
+          text1: 'Could not generate voucher',
+          text2: 'Please try again.',
+        });
+        return null;
+      }
+    },
+    [],
+  );
 
   const getExperience = useCallback(
     (id: string) => experiences.find(e => e.id === id),

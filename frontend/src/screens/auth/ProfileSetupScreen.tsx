@@ -74,6 +74,8 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
   const { width, height } = useWindowDimensions();
   const sso = route.params?.sso ?? false;
   const prefill = route.params?.prefill;
+  // Reached from an order / booking / loyalty gate rather than onboarding.
+  const gated = route.params?.gated ?? false;
 
   // SSO path arrives with name/email already known from the provider.
   const [firstName, setFirstName] = useState(
@@ -101,7 +103,7 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const referralInputRef = useRef<TextInput>(null);
-  const { updateProfile } = useAuth();
+  const { updateProfile, markProfileSkipped } = useAuth();
 
   // Registration validation (Module 1 Â· 4.1): full name 2â€“50 chars, valid
   // email, and a date of birth that makes the user at least 13.
@@ -155,7 +157,13 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
     try {
       const updated = await updateProfile(patch);
       console.log('[Registration] profile update success:', updated);
-      navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
+      if (gated) {
+        // Came from a gate — drop them back where they were so they can
+        // retry the order / booking / redemption straight away.
+        navigation.goBack();
+      } else {
+        navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
+      }
     } catch (error) {
       console.log('[Registration] profile update failed:', error);
       const message =
@@ -170,6 +178,25 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
       scrollRef.current?.scrollTo({y: 0, animated: true});
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /**
+   * "Skip for now" — deliberately does NOT validate or save anything. It just
+   * remembers the skip (so Splash / OTP stop forcing this screen again) and
+   * moves on. Ordering, booking and loyalty stay gated until the profile is
+   * completed, and send the user back here at that point.
+   */
+  const skipForNow = async () => {
+    if (submitting) {
+      return;
+    }
+    setErrors({});
+    await markProfileSkipped();
+    if (gated) {
+      navigation.goBack();
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: 'Location' }] });
     }
   };
 
@@ -378,7 +405,7 @@ export function ProfileSetupScreen({ navigation, route }: Props) {
 
           <PrimaryButton label="Continue" onPress={finish} loading={submitting} disabled={submitting} />
 
-          <Pressable style={styles.skip} onPress={finish} disabled={submitting}>
+          <Pressable style={styles.skip} onPress={skipForNow} disabled={submitting}>
             <Text style={styles.skipText}>Skip for now</Text>
           </Pressable>
         </ScrollView>

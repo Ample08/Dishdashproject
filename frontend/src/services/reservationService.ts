@@ -101,6 +101,16 @@ export async function fetchBookings(): Promise<Booking[]> {
   return unwrap<ApiBooking[]>(res).map(mapBooking);
 }
 
+/** GET /api/app/bookings/{ref} — fetch one booking's live detail. Null on failure. */
+export async function fetchBooking(ref: string): Promise<Booking | null> {
+  try {
+    const res = await api.get(`/api/app/bookings/${ref}`);
+    return mapBooking(unwrap<ApiBooking>(res));
+  } catch {
+    return null;
+  }
+}
+
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
   const res = await api.post('/api/app/bookings', input);
   return mapBooking(unwrap<ApiBooking>(res));

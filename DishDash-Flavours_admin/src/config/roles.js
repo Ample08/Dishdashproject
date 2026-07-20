@@ -1,7 +1,12 @@
 /* ============================================================
-   RBAC — roles, permissions & role-aware navigation
-   Hierarchy: Super Admin -> Branch -> Staff
-   (Brand layer removed — branches are the single location entity.)
+   RBAC — driven by the API, not by hardcoded roles.
+
+   The server is the source of truth: /api/admin/login and
+   /api/admin/profile return `effectivePermissions`, a flat list
+   like ['orders.view', 'menu.manage', ...]. Everything here
+   filters against that list.
+
+   Module keys below mirror the groups from GET /api/admin/permissions.
    ============================================================ */
 
 export const ROLES = {
@@ -12,75 +17,129 @@ export const ROLES = {
     scope: 'System Level',
     icon: 'las la-crown',
     color: 'grape',
-    desc: 'Sees & controls everything across all branches.',
+    desc: 'Full access across every brand and branch.',
   },
-  branch_admin: {
-    key: 'branch_admin',
-    name: 'Branch Manager',
-    short: 'Branch Manager',
-    scope: 'Branch Level',
-    icon: 'las la-map-marker',
+  brand_manager: {
+    key: 'brand_manager',
+    name: 'Brand Manager',
+    short: 'Brand Manager',
+    scope: 'Brand Level',
+    icon: 'las la-store',
     color: 'info',
-    desc: 'Runs a single assigned branch.',
+    desc: 'Runs one assigned brand.',
   },
-  staff: {
-    key: 'staff',
-    name: 'Staff',
+  location_staff: {
+    key: 'location_staff',
+    name: 'Location Staff',
     short: 'Staff',
     scope: 'Branch Level',
     icon: 'las la-user-tag',
     color: 'warning',
-    desc: 'Limited, permission-based access to one branch.',
-  },
-  catering_admin: {
-    key: 'catering_admin',
-    name: 'Bait Um Abdallah',
-    short: 'Catering Brand',
-    scope: 'Catering Only',
-    icon: 'las la-concierge-bell',
-    color: 'grape',
-    desc: 'Sees only the Bait Um Abdallah catering inquiries.',
+    desc: 'Day-to-day floor access for a single branch.',
   },
 }
 
-export const ROLE_ORDER = ['super_admin', 'branch_admin', 'staff', 'catering_admin']
+export const ROLE_ORDER = ['super_admin', 'brand_manager', 'location_staff']
 
-// Permission modules (from master doc)
+// Unknown role from the API shouldn't crash the header/sidebar.
+export function roleMetaFor(role) {
+  return (
+    ROLES[role] || {
+      key: role,
+      name: role ? role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Staff',
+      short: 'Staff',
+      scope: 'Assigned Scope',
+      icon: 'las la-user',
+      color: 'info',
+      desc: '',
+    }
+  )
+}
+
+/* Permission modules — mirrors the `groups` from GET /api/admin/permissions.
+   Each has a .view and a .manage variant server-side (reports/audit are view-only). */
 export const PERMISSIONS = [
-  { key: 'dashboard', label: 'Dashboard View', icon: 'las la-th-large' },
-  { key: 'orders', label: 'Orders Manage', icon: 'las la-receipt' },
+  { key: 'orders', label: 'Orders', icon: 'las la-receipt' },
+  { key: 'menu', label: 'Menu & Brands', icon: 'las la-utensils' },
   { key: 'reservations', label: 'Reservations', icon: 'las la-calendar-check' },
-  { key: 'catering', label: 'Bait Um Abdallah', icon: 'las la-concierge-bell' },
-  { key: 'menu', label: 'Menu Manage', icon: 'las la-utensils' },
-  { key: 'customers', label: 'Customers / CRM', icon: 'las la-user-friends' },
-  { key: 'brands', label: 'Brand Management', icon: 'las la-store' },
-  { key: 'branches', label: 'Branch Management', icon: 'las la-map-marked-alt' },
-  { key: 'staff', label: 'Staff & Roles', icon: 'las la-user-shield' },
-  { key: 'offers', label: 'Offers Manage', icon: 'las la-tags' },
-  { key: 'vouchers', label: 'Voucher Manage', icon: 'las la-ticket-alt' },
-  { key: 'loyalty', label: 'Loyalty Manage', icon: 'las la-medal' },
-  { key: 'reports', label: 'Reports View', icon: 'las la-chart-pie' },
-  { key: 'audit', label: 'Audit Logs', icon: 'las la-clipboard-list' },
-  { key: 'settings', label: 'Settings Manage', icon: 'las la-cog' },
+  { key: 'catering', label: 'Catering', icon: 'las la-concierge-bell' },
+  { key: 'loyalty', label: 'Loyalty', icon: 'las la-medal' },
+  { key: 'vouchers', label: 'Vouchers', icon: 'las la-ticket-alt' },
+  { key: 'offers', label: 'Experience Offers', icon: 'las la-star' },
+  { key: 'users', label: 'User CRM', icon: 'las la-user-friends' },
+  { key: 'staff', label: 'Staff & Access', icon: 'las la-user-shield' },
+  { key: 'settings', label: 'Settings', icon: 'las la-cog' },
+  { key: 'reports', label: 'Reporting', icon: 'las la-chart-pie' },
+  { key: 'audit', label: 'Audit Log', icon: 'las la-clipboard-list' },
 ]
 
-// What each role can access by default
-export const ROLE_PERMISSIONS = {
-  super_admin: PERMISSIONS.map((p) => p.key),
-  branch_admin: ['dashboard', 'orders', 'reservations', 'menu', 'customers', 'staff', 'reports'],
-  staff: ['dashboard', 'orders', 'menu'],
-  catering_admin: ['catering'],
+// Loyalty tier → badge class (tiers come from the API: Member/Bronze/Silver/Gold/Platinum).
+const TIER_BADGE = {
+  Member: 'badge-neutral', Bronze: 'badge-warning', Silver: 'badge-info',
+  Gold: 'badge-warning', Platinum: 'badge-grape',
+}
+export function tierBadge(tier) {
+  return TIER_BADGE[tier] || 'badge-neutral'
 }
 
-export function can(role, permission) {
-  return (ROLE_PERMISSIONS[role] || []).includes(permission)
+// These modules have only a .view permission server-side (no .manage variant).
+export const VIEW_ONLY_MODULES = ['reports', 'audit']
+
+// The permission strings a module actually supports, e.g. 'orders' -> ['orders.view','orders.manage'].
+export function variantsFor(moduleKey) {
+  return VIEW_ONLY_MODULES.includes(moduleKey)
+    ? [`${moduleKey}.view`]
+    : [`${moduleKey}.view`, `${moduleKey}.manage`]
 }
 
-/* ---- Role-aware sidebar navigation ----
-   Each item declares which permission it needs; sidebar filters by role. */
+/* Server-side defaults per role (from GET /api/admin/permissions -> roleDefaults).
+   Reference only — a signed-in user is gated by their own effectivePermissions,
+   which an admin can override per staff member. */
+export const ROLE_DEFAULTS = {
+  super_admin: PERMISSIONS.flatMap((p) =>
+    p.key === 'reports' || p.key === 'audit' ? [`${p.key}.view`] : [`${p.key}.view`, `${p.key}.manage`],
+  ),
+  brand_manager: [
+    'orders.view', 'menu.view', 'menu.manage', 'offers.view', 'offers.manage',
+    'reservations.view', 'reservations.manage', 'catering.view', 'catering.manage',
+    'loyalty.view', 'vouchers.view', 'reports.view',
+  ],
+  location_staff: [
+    'orders.view', 'orders.manage', 'reservations.view', 'reservations.manage',
+    'offers.view', 'vouchers.view',
+  ],
+}
+
+// Module-level view of the defaults — used by the Staff roles matrix.
+export const ROLE_PERMISSIONS = Object.fromEntries(
+  Object.entries(ROLE_DEFAULTS).map(([role, perms]) => [
+    role,
+    [...new Set(perms.map((p) => p.split('.')[0]))],
+  ]),
+)
+
+/* ---- The two checks every page should use ---- */
+
+// Can the user see this module at all? (`orders.view` OR `orders.manage`)
+export function can(user, moduleKey) {
+  if (!user) return false
+  if (!moduleKey) return true
+  return (user.permissions || []).some((p) => p.split('.')[0] === moduleKey)
+}
+
+// Can the user change things here, or is it read-only?
+export function canManage(user, moduleKey) {
+  if (!user || !moduleKey) return false
+  return (user.permissions || []).includes(`${moduleKey}.manage`)
+}
+
+/* ---- Permission-aware sidebar navigation ----
+   `perm`   -> needs view access to that module
+   `manage` -> needs manage access
+   `roles`  -> restricted to specific roles (used where the API has no permission yet) */
 const NAV = [
   { section: 'Overview' },
-  { label: 'Dashboard', path: '/dashboard', icon: 'las la-th-large', perm: 'dashboard' },
+  { label: 'Dashboard', path: '/dashboard', icon: 'las la-th-large' },
 
   { section: 'Operations' },
   {
@@ -117,19 +176,21 @@ const NAV = [
       { label: 'Add-ons & Flavours', path: '/menu?tab=addons' },
     ],
   },
-  { label: 'Customers / CRM', path: '/customers', icon: 'las la-user-friends', perm: 'customers' },
+  { label: 'Customers / CRM', path: '/customers', icon: 'las la-user-friends', perm: 'users' },
 
   { section: 'Organization' },
-  { label: 'Brands', path: '/brands', icon: 'las la-store', perm: 'brands' },
-  { label: 'Branches', path: '/branches', icon: 'las la-map-marked-alt', perm: 'branches' },
+  // The API groups brands under the menu permission ("Menu & Brands").
+  { label: 'Brands', path: '/brands', icon: 'las la-store', perm: 'menu' },
+  // No admin branches API exists yet — super admin only, still on mock data.
+  { label: 'Branches', path: '/branches', icon: 'las la-map-marked-alt', roles: ['super_admin'] },
   {
     label: 'Staff & Roles',
-    labelFor: { branch_admin: 'Staff' }, // no role management at branch level
+    labelFor: { brand_manager: 'Staff', location_staff: 'Staff' },
     icon: 'las la-user-shield',
     perm: 'staff',
     children: [
       { label: 'All Staff', path: '/staff' },
-      { label: 'Add Staff', path: '/staff?action=add', roles: ['branch_admin'] },
+      { label: 'Add Staff', path: '/staff?action=add', manage: 'staff' },
       { label: 'Roles & Permissions', path: '/staff?tab=roles', roles: ['super_admin'] },
     ],
   },
@@ -171,26 +232,31 @@ const NAV = [
   { label: 'Settings', path: '/settings', icon: 'las la-cog', perm: 'settings' },
 ]
 
-export function navForRole(role) {
-  const allowed = new Set(ROLE_PERMISSIONS[role] || [])
+function allows(user, item) {
+  if (item.roles && !item.roles.includes(user.role)) return false
+  if (item.manage && !canManage(user, item.manage)) return false
+  if (item.perm && !can(user, item.perm)) return false
+  return true
+}
+
+export function navFor(user) {
   const out = []
   for (const item of NAV) {
     if (item.section) {
-      out.push(item) // resolve later — drop empty sections after filtering
+      out.push(item) // empty sections are dropped below
       continue
     }
-    if (item.perm && !allowed.has(item.perm)) continue
-    // per-role label override (e.g. "Staff & Roles" → "Staff" for branch managers)
-    const label = item.labelFor?.[role] || item.label
+    if (!allows(user, item)) continue
+
+    const label = item.labelFor?.[user.role] || item.label
     if (item.children) {
-      // children may declare a `roles` whitelist — keep only those visible to this role
-      const children = item.children.filter((c) => !c.roles || c.roles.includes(role))
+      const children = item.children.filter((c) => allows(user, c))
+      if (!children.length) continue
       out.push({ ...item, label, children })
     } else {
       out.push({ ...item, label })
     }
   }
-  // remove section headers that have no following items
   return out.filter((item, i) => {
     if (!item.section) return true
     const next = out[i + 1]
@@ -198,10 +264,10 @@ export function navForRole(role) {
   })
 }
 
-/* Landing page for a role after login — dashboard if allowed,
-   otherwise the first nav destination the role can actually reach. */
-export function homePathForRole(role) {
-  if (can(role, 'dashboard')) return '/dashboard'
-  const first = navForRole(role).find((item) => !item.section && (item.path || item.children))
+/* Where to land after login — dashboard is open to every signed-in admin,
+   so this only matters if that ever changes. */
+export function homePathFor(user) {
+  const nav = navFor(user)
+  const first = nav.find((item) => !item.section && (item.path || item.children))
   return first?.path || first?.children?.[0]?.path || '/dashboard'
 }

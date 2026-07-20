@@ -68,18 +68,15 @@ export type ActiveOrder = {
 
 type OrderValue = {
   active: ActiveOrder | null;
-  /** Local/demo order placement (used as a fallback when the API is offline). */
-  placeOrder: (o: Omit<ActiveOrder, 'id' | 'status'>) => void;
   /** Set an order that was created on the backend (has a real ref + status). */
   startOrder: (order: ActiveOrder) => void;
-  advance: () => void;
   clearOrder: () => void;
 };
 
 const OrderContext = createContext<OrderValue | null>(null);
 
-/** Poll / local-advance interval for live status changes. */
-const ADVANCE_MS = 8000;
+/** Backend poll interval for live status changes. */
+const POLL_MS = 8000;
 
 export function OrderProvider({children}: {children: React.ReactNode}) {
   const {token} = useAuth();
@@ -103,31 +100,14 @@ export function OrderProvider({children}: {children: React.ReactNode}) {
     };
   }, [token]);
 
-  const placeOrder = useCallback((o: Omit<ActiveOrder, 'id' | 'status'>) => {
-    setActive({...o, id: 'CRV-00123', status: 'placed'});
-  }, []);
-
   const startOrder = useCallback((order: ActiveOrder) => {
     setActive(order);
   }, []);
 
   const clearOrder = useCallback(() => setActive(null), []);
 
-  const advance = useCallback(() => {
-    setActive(prev => {
-      if (!prev) {
-        return prev;
-      }
-      const i = ORDER_STAGES.indexOf(prev.status);
-      if (i >= ORDER_STAGES.length - 1) {
-        return prev;
-      }
-      return {...prev, status: ORDER_STAGES[i + 1]};
-    });
-  }, []);
-
-  // Live status: poll the backend for the current stage; if it's unreachable
-  // (or this is a local demo order) fall back to advancing on a timer.
+  // Live status: poll the backend for the current stage. On a transient error
+  // we keep the last known status (no fake progression).
   useEffect(() => {
     if (!active || active.status === 'pickedup') {
       return;
@@ -146,22 +126,20 @@ export function OrderProvider({children}: {children: React.ReactNode}) {
           );
         }
       } catch {
-        if (!cancelled) {
-          advance();
-        }
+        // Keep the last known status until the next successful poll.
       }
     };
 
-    const t = setInterval(tick, ADVANCE_MS);
+    const t = setInterval(tick, POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, [active, advance]);
+  }, [active]);
 
   const value = useMemo<OrderValue>(
-    () => ({active, placeOrder, startOrder, advance, clearOrder}),
-    [active, placeOrder, startOrder, advance, clearOrder],
+    () => ({active, startOrder, clearOrder}),
+    [active, startOrder, clearOrder],
   );
 
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;

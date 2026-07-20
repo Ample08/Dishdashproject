@@ -30,25 +30,44 @@ const TIMELINE: {key: OrderStatus; title: string; sub: string}[] = [
   {key: 'pickedup', title: 'Picked up', sub: 'completed'},
 ];
 
-const SUMMARY_ITEMS = [
-  {qty: 1, name: 'Mixed Grill Platter', price: 150},
-  {qty: 1, name: 'Hummus Beiruti', price: 28},
-  {qty: 1, name: 'Shish Taouk Wrap', price: 38},
-];
-
 export function OrderStatusScreen({navigation}: RootStackScreenProps<'OrderStatus'>) {
   const insets = useSafeAreaInsets();
   const {active} = useOrders();
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
-  const status: OrderStatus = active?.status ?? 'preparing';
+  // No live order → real empty state (no fake summary/total/ref).
+  if (!active) {
+    return (
+      <View style={styles.root}>
+        <StatusBar barStyle="dark-content" />
+        <View style={[styles.topBar, {paddingTop: insets.top + 8}]}>
+          <Pressable
+            style={styles.iconBtn}
+            hitSlop={8}
+            accessibilityLabel="Back"
+            onPress={() => navigation.navigate('MainTabs')}>
+            <Icon name="chevron-back" size={24} color={colors.text.primary} />
+          </Pressable>
+          <Text style={styles.topTitle}>Order</Text>
+          <View style={styles.iconBtn} />
+        </View>
+        <View style={styles.emptyWrap}>
+          <Icon name="receipt-outline" size={40} color={colors.text.tertiary} />
+          <Text style={styles.emptyText}>No active order right now.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const status: OrderStatus = active.status;
   const meta = STATUS_META[status];
   const cur = ORDER_STAGES.indexOf(status);
-  const brand = BRANDS[active?.brand ?? 'Karaz'];
-  const total = active?.total ?? 246.8;
-  const items = active?.items?.length ? active.items : SUMMARY_ITEMS;
-  const itemCount = active?.itemCount ?? items.reduce((n, it) => n + it.qty, 0);
-  const orderId = active?.id ?? 'CRV-00123';
-  const [summaryOpen, setSummaryOpen] = useState(false);
+  const brand = BRANDS[active.brand];
+  const total = active.total;
+  const items = active.items;
+  const itemCount = active.itemCount;
+  const orderId = active.id;
+  const pointsEarned = Math.max(0, Math.floor(total / 5));
 
   const handleDownloadInvoice = async () => {
     const lines = items
@@ -84,7 +103,7 @@ export function OrderStatusScreen({navigation}: RootStackScreenProps<'OrderStatu
           onPress={() => navigation.navigate('MainTabs')}>
           <Icon name="chevron-back" size={24} color={colors.text.primary} />
         </Pressable>
-        <Text style={styles.topTitle}>Order #{active?.id ?? 'CRV-00123'}</Text>
+        <Text style={styles.topTitle}>Order #{orderId}</Text>
         <Pressable style={styles.helpBtn} hitSlop={8}>
           <Text style={styles.helpText}>Help</Text>
         </Pressable>
@@ -112,7 +131,7 @@ export function OrderStatusScreen({navigation}: RootStackScreenProps<'OrderStatu
         <View style={styles.points}>
         <Coin size={16}  />
           <Text style={styles.pointsText}>
-            <Text style={styles.pointsBold}>+12 pts</Text> queued · credits on pickup
+            <Text style={styles.pointsBold}>+{pointsEarned} pts</Text> queued · credits on pickup
           </Text>
         </View>
 
@@ -266,6 +285,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   topTitle: {fontFamily: fontFamily.bodyBold, fontSize: 18, color: colors.text.primary},
+  emptyWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingBottom: 80},
+  emptyText: {fontFamily: fontFamily.bodyMedium, fontSize: 14, color: colors.text.secondary},
   helpBtn: {
     backgroundColor: colors.brand.white,
     borderRadius: radius.pill,

@@ -11,7 +11,6 @@ import type {BrandKey} from '../data/menu';
 import {
   branchByKey,
   MIN_GUESTS,
-  SEED_BOOKINGS,
   type Booking,
   type BookingStatus,
   type BranchKey,
@@ -93,17 +92,20 @@ const ReservationContext = createContext<ReservationValue | null>(null);
 export function ReservationProvider({children}: {children: React.ReactNode}) {
   const {token} = useAuth();
   const [draft, setDraft] = useState<ReservationDraft>(EMPTY_DRAFT);
-  const [bookings, setBookings] = useState<Booking[]>(SEED_BOOKINGS);
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
-  // Once signed in, replace the seed list with the user's real bookings.
-  // Offline / signed-out → the bundled seed stays (mock fallback).
+  // Bookings come from the API only. Signed out → empty; signed in → the user's
+  // real bookings (an empty real list correctly shows the empty state).
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setBookings([]);
+      return;
+    }
     let cancelled = false;
     reservationApi
       .fetchBookings()
       .then(list => {
-        if (!cancelled && list.length) setBookings(list);
+        if (!cancelled) setBookings(list);
       })
       .catch(() => {});
     return () => {

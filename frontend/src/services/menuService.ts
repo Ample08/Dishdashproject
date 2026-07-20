@@ -95,6 +95,56 @@ export async function fetchBrands(): Promise<ApiBrand[]> {
   return unwrap(res);
 }
 
+/** Map a single API brand onto the local BrandInfo shape (keeps local logo fallback). */
+export function mapBrand(b: ApiBrand, prev?: BrandInfo): Partial<BrandInfo> {
+  return {
+    name: b.name,
+    cuisine: b.cuisine,
+    tagline: b.tagline,
+    rating: Number(b.rating),
+    ratingCount: b.rating_count,
+    priceLevel: b.price_level,
+    tags: b.tags,
+    color: b.color,
+    logo: logos[b.logo_key] ?? prev?.logo,
+    branch: b.branch,
+    distance: b.distance,
+    address: b.address,
+    prepTime: b.prep_time,
+    categories: parseCategories(b.categories) ?? prev?.categories,
+  };
+}
+
+/**
+ * GET /api/app/brands/{key} — fetch one brand and patch the bundled BRANDS
+ * entry in place so screens reading BRANDS[key] pick up fresh data. Returns the
+ * updated BrandInfo, or null if the call fails (screen keeps the bundled copy).
+ */
+export async function fetchBrand(key: BrandKey): Promise<BrandInfo | null> {
+  try {
+    const res = await api.get(`/api/app/brands/${key}`);
+    const target = BRANDS[key];
+    const patch = mapBrand(unwrap<ApiBrand>(res), target);
+    if (target) {
+      Object.assign(target, patch);
+      return target;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** GET /api/app/menu/{slug} — fetch one dish's live detail (price, sold-out, description). */
+export async function fetchDish(slug: string): Promise<MenuItem | null> {
+  try {
+    const res = await api.get(`/api/app/menu/${slug}`);
+    return mapItem(unwrap<ApiMenuItem>(res));
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchMenu(params?: {
   brand?: BrandKey;
   category?: string;
@@ -124,23 +174,7 @@ export async function hydrateMenu(): Promise<boolean> {
     apiBrands.forEach(b => {
       const target = BRANDS[b.brand_key];
       if (!target) return;
-      const patch: Partial<BrandInfo> = {
-        name: b.name,
-        cuisine: b.cuisine,
-        tagline: b.tagline,
-        rating: Number(b.rating),
-        ratingCount: b.rating_count,
-        priceLevel: b.price_level,
-        tags: b.tags,
-        color: b.color,
-        logo: logos[b.logo_key] ?? target.logo,
-        branch: b.branch,
-        distance: b.distance,
-        address: b.address,
-        prepTime: b.prep_time,
-        categories: parseCategories(b.categories) ?? target.categories,
-      };
-      Object.assign(target, patch);
+      Object.assign(target, mapBrand(b, target));
     });
 
     // --- Items: rebuild the per-brand arrays and refresh the shared ones ---

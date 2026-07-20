@@ -1,146 +1,309 @@
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { money } from '../config/app.js'
 import PageHeader from '../components/ui/PageHeader.jsx'
-import {
-  loyaltyMembers, loyaltyTiers, unmatchedPos, pointAdjustments,
-  pointsLedger, loyaltyLedgerTypeMeta, effectiveTier, tierForPoints,
-} from '../data/db.js'
+import { useAuth } from '../context/AuthContext.jsx'
+import { canManage, tierBadge } from '../config/roles.js'
+import * as loyaltyApi from '../api/loyalty.js'
+import * as posApi from '../api/pos.js'
 
+const PAGE_SIZE = 15
 const TABS = [
   { key: 'members', label: 'Members', icon: 'las la-users' },
-  { key: 'ledger', label: 'Points Ledger', icon: 'las la-list-alt' },
   { key: 'unmatched', label: 'Unmatched POS', icon: 'las la-unlink' },
-  { key: 'points', label: 'Point Adjustments', icon: 'las la-sliders-h' },
 ]
 
-export default function Loyalty() {
-  const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') || 'members'
+function initials(name = '') {
+  return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
+}
 
-  const totalPoints = loyaltyMembers.reduce((s, m) => s + m.points, 0)
+export default function Loyalty() {
+  const { user } = useAuth()
+  const canEdit = canManage(user, 'loyalty')
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'unmatched' ? 'unmatched' : 'members'
 
   return (
     <div className="anim-fade-in">
-      <PageHeader crumb={['Growth']} title="Loyalty Management" subtitle="Members, points and POS reconciliation">
-        <button className="btn btn-outline btn-sm"><i className="las la-download" /> Export</button>
-        <button className="btn btn-primary btn-sm"><i className="las la-medal" /> Adjust Points</button>
-      </PageHeader>
-
-      <div className="kpi-grid stagger" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="kpi-card"><div className="kpi-top"><span className="kpi-ic grape"><i className="las la-users" /></span></div><div className="kpi-value">{loyaltyMembers.length}</div><div className="kpi-label">Active Members</div></div>
-        <div className="kpi-card"><div className="kpi-top"><span className="kpi-ic green"><i className="las la-star" /></span></div><div className="kpi-value">{(totalPoints / 1000).toFixed(1)}k</div><div className="kpi-label">Points Issued</div></div>
-        <div className="kpi-card"><div className="kpi-top"><span className="kpi-ic danger"><i className="las la-unlink" /></span></div><div className="kpi-value">{unmatchedPos.length}</div><div className="kpi-label">Unmatched POS</div></div>
-        <div className="kpi-card"><div className="kpi-top"><span className="kpi-ic warn"><i className="las la-sliders-h" /></span></div><div className="kpi-value">{pointAdjustments.length}</div><div className="kpi-label">Adjustments (today)</div></div>
-      </div>
+      <PageHeader crumb={['Growth']} title="Loyalty Management" subtitle="Members, points and POS reconciliation" />
 
       <div style={{ display: 'flex', gap: 8, margin: '4px 0 18px', flexWrap: 'wrap' }}>
         {TABS.map((t) => (
           <button key={t.key} className={`btn btn-sm ${tab === t.key ? 'btn-ink' : 'btn-outline'}`} onClick={() => setParams(t.key === 'members' ? {} : { tab: t.key })}>
             <i className={t.icon} /> {t.label}
-            {t.key === 'unmatched' && <span className="badge badge-danger" style={{ marginLeft: 2 }}>{unmatchedPos.length}</span>}
           </button>
         ))}
       </div>
 
-      {tab === 'members' && (
-        <div className="table-card">
-          <div className="table-toolbar"><h3>Loyalty Members</h3><div className="table-search"><i className="las la-search" /><input placeholder="Search member…" /></div></div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Member</th><th>Tier</th><th>Points</th><th>Lifetime Spend</th><th>Orders</th><th>Member Since</th><th></th></tr></thead>
-              <tbody>
-                {loyaltyMembers.map((m) => {
-                  const tier = effectiveTier(m)
-                  const overridden = m.override && m.override !== tierForPoints(m.points)
-                  return (
-                    <tr key={m.id}>
-                      <td><div className="cell-user"><span className="avatar">{m.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}</span><div className="cu-meta"><b>{m.name}</b><span>{m.id}</span></div></div></td>
-                      <td>
-                        <span className={`badge ${loyaltyTiers[tier]}`}><i className="las la-medal" /> {tier}</span>
-                        {overridden && <span className="badge badge-info" style={{ marginLeft: 4 }} title={`Manually overridden from ${tierForPoints(m.points)}`}><i className="las la-lock" /> override</span>}
-                      </td>
-                      <td className="td-strong">{m.points.toLocaleString()}</td>
-                      <td className="td-strong">{money(m.spent)}</td>
-                      <td>{m.orders}</td>
-                      <td>{new Date(m.joined).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</td>
-                      <td><div className="row-actions"><button className="icon-btn" title="View"><i className="las la-eye" /></button><button className="icon-btn" title="Override tier"><i className="las la-medal" /></button><button className="icon-btn" title="Adjust points"><i className="las la-plus-circle" /></button></div></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {tab === 'members' ? <MembersTab canEdit={canEdit} /> : <UnmatchedTab canEdit={canEdit} />}
+    </div>
+  )
+}
+
+function MembersTab({ canEdit }) {
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [rows, setRows] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [adjusting, setAdjusting] = useState(null)
+  const [history, setHistory] = useState(null)
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQuery(search); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const res = await loyaltyApi.listMembers({
+        page, limit: PAGE_SIZE, sortBy: 'loyalty_points', sortOrder: 'DESC',
+        ...(query && { search: query }),
+      })
+      setRows(res.data || [])
+      setPagination(res.pagination || null)
+    } catch (err) {
+      setError(err.apiMessage || 'Could not load members.')
+      setRows([])
+    } finally { setLoading(false) }
+  }, [page, query])
+
+  useEffect(() => { load() }, [load])
+
+  const total = pagination?.total ?? rows.length
+
+  return (
+    <div className="table-card">
+      <div className="table-toolbar">
+        <h3>{total} Loyalty Members</h3>
+        <div className="table-search"><i className="las la-search" /><input placeholder="Search member…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+      </div>
+
+      {error && (
+        <div className="alert alert-danger" style={{ margin: 16 }}>
+          <i className="las la-exclamation-circle" /> {error}
+          <button className="btn btn-sm btn-outline" style={{ marginLeft: 'auto' }} onClick={load}>Retry</button>
+        </div>
+      )}
+
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead><tr><th>Member</th><th>Tier</th><th>Points</th><th>Phone</th><th>Since</th>{canEdit && <th></th>}</tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6}><div className="empty-state"><div className="spinner" /><p>Loading members…</p></div></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6}><div className="empty-state"><div className="es-ic"><i className="las la-medal" /></div><h4>No members here</h4><p>Nothing matches this search.</p></div></td></tr>
+            ) : (
+              rows.map((m) => (
+                <tr key={m.id}>
+                  <td><div className="cell-user"><span className="avatar">{initials(m.name)}</span><div className="cu-meta"><b>{m.name}</b><span>Guest #{m.id}</span></div></div></td>
+                  <td><span className={`badge ${tierBadge(m.tier)}`}><i className="las la-medal" /> {m.tier || '—'}</span></td>
+                  <td className="td-strong">{Number(m.loyalty_points || 0).toLocaleString()}</td>
+                  <td>{m.phone || '—'}</td>
+                  <td>{m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}</td>
+                  {canEdit && (
+                    <td>
+                      <div className="row-actions">
+                        <button className="icon-btn" title="Points history" onClick={() => setHistory(m)}><i className="las la-history" /></button>
+                        <button className="icon-btn" title="Adjust points" onClick={() => setAdjusting(m)}><i className="las la-plus-circle" /></button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {!loading && rows.length > 0 && (
+        <div className="table-foot">
+          <span className="tf-info">Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1} · {total} members</span>
+          <div className="pagination">
+            <button disabled={!pagination?.hasPrevPage} onClick={() => setPage((p) => Math.max(1, p - 1))}><i className="las la-angle-left" /></button>
+            <button className="active">{pagination?.page ?? page}</button>
+            <button disabled={!pagination?.hasNextPage} onClick={() => setPage((p) => p + 1)}><i className="las la-angle-right" /></button>
           </div>
         </div>
       )}
 
-      {tab === 'ledger' && (
-        <div className="table-card">
-          <div className="table-toolbar"><h3>Points Ledger</h3><div className="table-search"><i className="las la-search" /><input placeholder="Search member…" /></div></div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Ref</th><th>Member</th><th>Type</th><th>Change</th><th>Note</th><th>When</th></tr></thead>
-              <tbody>
-                {pointsLedger.map((l) => {
-                  const t = loyaltyLedgerTypeMeta[l.type]
-                  return (
-                    <tr key={l.id}>
-                      <td className="td-strong">{l.id}</td>
-                      <td>{l.member}</td>
-                      <td><span className={`badge ${t.cls}`}><i className={t.icon} /> {t.label}</span></td>
-                      <td><span className={`badge ${l.delta > 0 ? 'badge-success' : l.delta < 0 ? 'badge-danger' : 'badge-neutral'}`}>{l.delta > 0 ? '+' : ''}{l.delta.toLocaleString()} pts</span></td>
-                      <td>{l.note}</td>
-                      <td>{l.time}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {adjusting && <AdjustModal member={adjusting} onClose={() => setAdjusting(null)} onSaved={() => { setAdjusting(null); load() }} />}
+      {history && <HistoryDrawer member={history} onClose={() => setHistory(null)} />}
+    </div>
+  )
+}
+
+function AdjustModal({ member, onClose, onSaved }) {
+  const [delta, setDelta] = useState('')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setErr('')
+    if (delta === '' || Number(delta) === 0) { setErr('Enter a non-zero points change.'); return }
+    if (!reason.trim()) { setErr('A reason is required.'); return }
+    setSaving(true)
+    try {
+      await loyaltyApi.adjustMemberPoints(member.id, { delta: Number(delta), reason: reason.trim() })
+      onSaved()
+    } catch (error) { setErr(error.apiMessage || 'Could not adjust points.'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-head"><h3>Adjust Points</h3><button type="button" className="icon-btn" onClick={onClose}><i className="las la-times" /></button></div>
+        <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+          {err && <div className="alert alert-danger"><i className="las la-exclamation-circle" /> {err}</div>}
+          <div className="flex-between" style={{ padding: '10px 13px', borderRadius: 'var(--radius)', background: 'var(--surface-soft)', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{member.name}</span>
+            <span className="badge badge-neutral">{Number(member.loyalty_points || 0).toLocaleString()} pts</span>
+          </div>
+          <div className="form-group">
+            <label>Points change <span className="text-muted">(use a negative number to deduct)</span></label>
+            <input type="number" className="form-control" value={delta} onChange={(e) => setDelta(e.target.value)} placeholder="e.g. -200" required />
+          </div>
+          <div className="form-group">
+            <label>Reason</label>
+            <input className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Goodwill correction" required />
           </div>
         </div>
-      )}
+        <div className="modal-foot">
+          <button type="button" className="btn btn-outline btn-sm" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving ? 'Saving…' : 'Apply Adjustment'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
 
-      {tab === 'unmatched' && (
-        <div className="table-card">
-          <div className="table-toolbar"><h3>Unmatched POS Transactions</h3><button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }}><i className="las la-sync" /> Retry All</button></div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Txn ID</th><th>Amount</th><th>Branch</th><th>Reason</th><th>When</th><th></th></tr></thead>
-              <tbody>
-                {unmatchedPos.map((u) => (
-                  <tr key={u.id}>
-                    <td className="td-strong">{u.txn}</td>
-                    <td className="td-strong">{money(u.amount)}</td>
-                    <td>{u.branch}</td>
-                    <td><span className="badge badge-danger dot">{u.reason}</span></td>
-                    <td>{u.time}</td>
-                    <td><div className="row-actions"><button className="icon-btn" title="Retry match"><i className="las la-link" /></button><button className="icon-btn"><i className="las la-ellipsis-h" /></button></div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+function HistoryDrawer({ member, onClose }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    loyaltyApi.getMemberHistory(member.id, { page: 1, limit: 50, sortBy: 'created_at', sortOrder: 'DESC' })
+      .then((res) => { if (!cancelled) setRows(res.data || []) })
+      .catch((err) => { if (!cancelled) setError(err.apiMessage || 'Could not load history.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [member.id])
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ justifyItems: 'end', padding: 0 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, height: '100vh', maxHeight: '100vh', borderRadius: 0, animation: 'slideInRight 0.3s var(--ease) both' }}>
+        <div className="modal-head">
+          <div><h3 style={{ fontSize: 18 }}>{member.name}</h3><div className="text-muted" style={{ fontSize: 12 }}>Points history</div></div>
+          <button className="icon-btn" onClick={onClose}><i className="las la-times" /></button>
+        </div>
+        <div className="modal-body">
+          {loading ? (
+            <div className="empty-state"><div className="spinner" /></div>
+          ) : error ? (
+            <div className="alert alert-danger"><i className="las la-exclamation-circle" /> {error}</div>
+          ) : rows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-tertiary)' }}><i className="las la-folder-open" style={{ fontSize: 28, display: 'block', marginBottom: 8 }} />No points activity yet</div>
+          ) : (
+            <div className="grid-gap" style={{ gap: 0 }}>
+              {rows.map((l) => (
+                <div className="order-mini" key={l.id}>
+                  <span className="om-ic"><i className="las la-coins" /></span>
+                  <div className="om-meta"><b>{l.title || 'Activity'}</b><span>{l.sub || ''}{l.created_at ? ` · ${new Date(l.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}</span></div>
+                  <span className={`badge ${l.delta > 0 ? 'badge-success' : l.delta < 0 ? 'badge-danger' : 'badge-neutral'}`}>{l.delta > 0 ? '+' : ''}{Number(l.delta || 0).toLocaleString()} pts</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function UnmatchedTab({ canEdit }) {
+  const [rows, setRows] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const res = await posApi.listUnmatched({ page, limit: PAGE_SIZE })
+      setRows(res.data || [])
+      setPagination(res.pagination || null)
+    } catch (err) {
+      setError(err.apiMessage || 'Could not load unmatched transactions.')
+      setRows([])
+    } finally { setLoading(false) }
+  }, [page])
+
+  useEffect(() => { load() }, [load])
+
+  const resolve = async (row) => {
+    const userId = window.prompt(`Attach transaction ${row.id} to which user id?`)
+    if (!userId) return
+    setBusyId(row.id)
+    try { await posApi.resolveUnmatched(row.id, { user_id: Number(userId) }); await load() }
+    catch (err) { setError(err.apiMessage || 'Could not resolve.') }
+    finally { setBusyId(null) }
+  }
+
+  return (
+    <div className="table-card">
+      <div className="table-toolbar">
+        <h3>Unmatched POS Transactions</h3>
+        <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}><i className="las la-sync" /> Refresh</button>
+      </div>
+      {error && (
+        <div className="alert alert-danger" style={{ margin: 16 }}>
+          <i className="las la-exclamation-circle" /> {error}
+          <button className="btn btn-sm btn-outline" style={{ marginLeft: 'auto' }} onClick={load}>Retry</button>
         </div>
       )}
-
-      {tab === 'points' && (
-        <div className="table-card">
-          <div className="table-toolbar"><h3>Point Adjustments</h3></div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Ref</th><th>Member</th><th>Change</th><th>Reason</th><th>By</th><th>When</th></tr></thead>
-              <tbody>
-                {pointAdjustments.map((p) => (
-                  <tr key={p.id}>
-                    <td className="td-strong">{p.id}</td>
-                    <td>{p.member}</td>
-                    <td><span className={`badge ${p.delta > 0 ? 'badge-success' : 'badge-danger'}`}><i className={`las la-arrow-${p.delta > 0 ? 'up' : 'down'}`} /> {p.delta > 0 ? '+' : ''}{p.delta} pts</span></td>
-                    <td>{p.reason}</td>
-                    <td>{p.by}</td>
-                    <td>{p.time}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead><tr><th>Txn ID</th><th>Amount</th><th>Txn Date</th><th>Reason</th>{canEdit && <th></th>}</tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5}><div className="empty-state"><div className="spinner" /><p>Loading…</p></div></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={5}><div className="empty-state"><div className="es-ic"><i className="las la-check-circle" /></div><h4>All matched</h4><p>No unmatched POS transactions right now.</p></div></td></tr>
+            ) : (
+              rows.map((u) => (
+                <tr key={u.id}>
+                  <td className="td-strong">{u.transaction_id || u.id}</td>
+                  <td className="td-strong">{u.amount ?? '—'}</td>
+                  <td>{u.txn_date || (u.created_at ? new Date(u.created_at).toLocaleDateString('en-GB') : '—')}</td>
+                  <td><span className="badge badge-danger dot" title={u.note || ''}>{u.note || 'unmatched'}</span></td>
+                  {canEdit && (
+                    <td>
+                      <button className="btn btn-xs btn-outline" disabled={busyId === u.id} onClick={() => resolve(u)}>
+                        <i className="las la-link" /> Match
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {!loading && rows.length > 0 && pagination && (
+        <div className="table-foot">
+          <span className="tf-info">Page {pagination.page} of {pagination.totalPages}</span>
+          <div className="pagination">
+            <button disabled={!pagination.hasPrevPage} onClick={() => setPage((p) => Math.max(1, p - 1))}><i className="las la-angle-left" /></button>
+            <button className="active">{pagination.page}</button>
+            <button disabled={!pagination.hasNextPage} onClick={() => setPage((p) => p + 1)}><i className="las la-angle-right" /></button>
           </div>
         </div>
       )}

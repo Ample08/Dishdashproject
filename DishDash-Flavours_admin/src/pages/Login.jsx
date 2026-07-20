@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useAuth, DEMO_USERS } from '../context/AuthContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { APP_NAME } from '../config/app.js'
-import { ROLES, ROLE_ORDER, homePathForRole } from '../config/roles.js'
+import { homePathFor } from '../config/roles.js'
 
 export default function Login() {
-  const { login, loginAs, isAuthenticated, loading } = useAuth()
+  const { login, isAuthenticated, loading } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('owner@flavours.ae')
-  const [password, setPassword] = useState('123456')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
@@ -27,14 +27,8 @@ export default function Login() {
     setSubmitting(true)
     const result = await login(email, password)
     setSubmitting(false)
-    if (result.success) navigate(homePathForRole(result.role))
+    if (result.success) navigate(homePathFor(result.user))
     else setError(result.message)
-  }
-
-  const quickLogin = (role) => {
-    setEmail(DEMO_USERS[role].email)
-    loginAs(role)
-    navigate(homePathForRole(role))
   }
 
   return (
@@ -113,29 +107,8 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="role-quick">
-            <div className="rq-label">Or explore a demo role</div>
-            <div className="role-quick-grid">
-              {ROLE_ORDER.map((rk) => {
-                const r = ROLES[rk]
-                return (
-                  <button key={rk} className="rq-btn" onClick={() => quickLogin(rk)}>
-                    <span className={`rq-ic kpi-ic ${toneFor(r.color)}`}><i className={r.icon} /></span>
-                    <span className="rq-meta">
-                      <b>{r.name}</b>
-                      <span>{r.scope}</span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
         </div>
       </main>
     </div>
   )
-}
-
-function toneFor(color) {
-  return { grape: 'grape', pistachio: 'green', info: 'info', warning: 'warn' }[color] || 'green'
 }

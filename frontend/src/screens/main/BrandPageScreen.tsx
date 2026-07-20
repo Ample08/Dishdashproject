@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -20,6 +20,7 @@ import {
   itemsForCategory,
   type MenuItem,
 } from '../../data/menu';
+import {fetchBrand} from '../../services/menuService';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useCart} from '../../state/CartContext';
 import {colors, fontFamily, radius} from '../../theme';
@@ -41,6 +42,20 @@ export function BrandPageScreen({navigation, route}: RootStackScreenProps<'Brand
   const brandKey = route.params.brand;
   const brand = BRANDS[brandKey];
   const cart = useCart();
+  // fetchBrand patches BRANDS[key] in place; bump this to re-render with fresh data.
+  const [, setRefresh] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    fetchBrand(brandKey).then(updated => {
+      if (alive && updated) {
+        setRefresh(n => n + 1);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [brandKey]);
   // Guard: categories must be an array (backend may hydrate it late/oddly).
   const categories = Array.isArray(brand.categories) ? brand.categories : [];
 

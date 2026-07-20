@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import {Dirham} from '../../components/Dirham';
 import {GradientFill} from '../../components/GradientFill';
 import {findItem} from '../../data/menu';
+import {fetchDish} from '../../services/menuService';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useCart} from '../../state/CartContext';
 import {colors, fontFamily, radius} from '../../theme';
@@ -44,7 +45,21 @@ export function DishDetailScreen({
     const {width} = useWindowDimensions();
     const heroHeight = Math.min(330, Math.max(245, width * 0.72));
   const {add} = useCart();
-  const item = findItem(route.params.itemId);
+  // Seed from the bundled catalog for an instant render, then freshen from
+  // GET /api/app/menu/{slug} (live price · sold-out · description).
+  const [item, setItem] = useState(() => findItem(route.params.itemId));
+
+  useEffect(() => {
+    let alive = true;
+    fetchDish(route.params.itemId).then(fresh => {
+      if (alive && fresh) {
+        setItem(fresh);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [route.params.itemId]);
 
   const [qty, setQty] = useState(1);
   const [expanded, setExpanded] = useState(false);

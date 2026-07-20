@@ -15,6 +15,7 @@ import { LoyaltyHeader } from '../../components/loyalty/LoyaltyHeader';
 import { CELEBRATION_STEPS, loyaltyColors } from '../../data/loyalty';
 import type { RootStackScreenProps } from '../../navigation/types';
 import { useLoyalty } from '../../state/LoyaltyContext';
+import { useProfileGate } from '../../state/useProfileGate';
 import { colors, fontFamily } from '../../theme';
 
 const MIN = 10;
@@ -28,12 +29,16 @@ export function GenerateCelebrationScreen({
 }: RootStackScreenProps<'GenerateCelebration'>) {
   const insets = useSafeAreaInsets();
   const { generateCelebration } = useLoyalty();
+  const requireProfile = useProfileGate();
   const [guests, setGuests] = useState(MIN);
 
-  const generate = () => {
-    const v = generateCelebration(guests);
-    navigation.replace('CelebrationGenerated', { voucherId: v.id });
-  };
+  const generate = () =>
+    requireProfile(async () => {
+      const v = await generateCelebration(guests);
+      if (v) {
+        navigation.replace('CelebrationGenerated', { voucherId: v.id });
+      }
+    }, 'Add your name, email and date of birth to generate a voucher.');
 
   return (
     <View style={styles.root}>

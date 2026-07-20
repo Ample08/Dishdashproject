@@ -21,6 +21,7 @@ import { dashboardImages } from '../../assets/dashboardImages';
 import { BRANDS, type MenuItem } from '../../data/menu';
 import type { RootStackScreenProps } from '../../navigation/types';
 import { useCart } from '../../state/CartContext';
+import { useProfileGate } from '../../state/useProfileGate';
 import { colors, fontFamily, radius } from '../../theme';
 
 /**
@@ -75,6 +76,7 @@ const ADDONS: MenuItem[] = [
 
 export function CartScreen({ navigation }: RootStackScreenProps<'Cart'>) {
   const insets = useSafeAreaInsets();
+  const requireProfile = useProfileGate();
   const { lines, inc, dec, add, qtyOf, subtotal, clear } = useCart();
 
   const brand = BRANDS[lines[0]?.brand ?? 'Karaz'];
@@ -501,7 +503,12 @@ export function CartScreen({ navigation }: RootStackScreenProps<'Cart'>) {
           style={[styles.cta, empty && styles.ctaDisabled]}
           disabled={empty}
           accessibilityRole="button"
-          onPress={() => navigation.navigate('Payment')}
+          onPress={() =>
+            requireProfile(
+              () => navigation.navigate('Payment'),
+              'Add your name, email and date of birth to place an order.',
+            )
+          }
         >
           {!empty ? <Shimmer /> : null}
           <Text style={styles.ctaText}>Place order ·</Text>

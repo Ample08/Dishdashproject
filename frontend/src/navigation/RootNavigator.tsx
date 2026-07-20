@@ -18,6 +18,7 @@ import {CartScreen} from '../screens/main/CartScreen';
 import {PaymentScreen} from '../screens/main/PaymentScreen';
 import {OrderSuccessScreen} from '../screens/main/OrderSuccessScreen';
 import {OrderStatusScreen} from '../screens/main/OrderStatusScreen';
+import {MyOrdersScreen} from '../screens/main/MyOrdersScreen';
 import {NewReservationScreen} from '../screens/reservation/NewReservationScreen';
 import {PlaceScreen} from '../screens/reservation/PlaceScreen';
 import {WhenTableScreen} from '../screens/reservation/WhenTableScreen';
@@ -104,7 +105,8 @@ export function RootNavigator() {
         options={{animation: 'fade', gestureEnabled: false}}
       />
       <Stack.Screen name="OrderStatus" component={OrderStatusScreen} />
-     
+      <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
+
       {/* Reservation flow (pushed over the tabs) */}
       <Stack.Screen name="NewReservation" component={NewReservationScreen} />
       <Stack.Screen

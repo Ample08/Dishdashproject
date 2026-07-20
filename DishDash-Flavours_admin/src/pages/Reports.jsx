@@ -1,116 +1,133 @@
+import { useEffect, useState } from 'react'
 import { money } from '../config/app.js'
-import { useAuth } from '../context/AuthContext.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
-import KPICard from '../components/ui/KPICard.jsx'
-import { AreaChart, DonutChart } from '../components/ui/Charts.jsx'
-import { revenueSeries, statusBreakdown, menu, scopeBranches, aggregators, referralRecords } from '../data/db.js'
+import { tierBadge } from '../config/roles.js'
+import * as reportsApi from '../api/reports.js'
 
-const refStatus = {
-  rewarded: 'badge-success',
-  pending: 'badge-warning',
-  expired: 'badge-neutral',
-}
+const TIER_ORDER = ['Member', 'Bronze', 'Silver', 'Gold', 'Platinum']
 
 export default function Reports() {
-  const { user } = useAuth()
-  const myBranches = scopeBranches(user)
-  const revenue = myBranches.reduce((s, b) => s + b.revenue, 0)
-  const orders = myBranches.reduce((s, b) => s + b.orders, 0)
-  const aov = Math.round(revenue / (orders || 1))
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const topCats = [...menu].sort((a, b) => b.orders - a.orders).slice(0, 5)
-  const maxCat = Math.max(...topCats.map((c) => c.orders))
+  const load = () => {
+    setLoading(true); setError('')
+    Promise.all([
+      reportsApi.reportOverview(),
+      reportsApi.reportOrdersByBrand(),
+      reportsApi.reportTierDistribution(),
+      reportsApi.reportVoucherSummary(),
+      reportsApi.reportOfferBookings(),
+    ])
+      .then(([overview, ordersByBrand, tiers, vouchers, offerBookings]) => {
+        setData({
+          overview: overview.data || {},
+          ordersByBrand: ordersByBrand.data || [],
+          tiers: tiers.data || {},
+          vouchers: vouchers.data || [],
+          offerBookings: offerBookings.data || [],
+        })
+      })
+      .catch((err) => setError(err.apiMessage || 'Could not load reports.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  if (loading) return <div className="empty-state"><div className="spinner" /><p>Loading reports…</p></div>
+  if (error) return (
+    <div className="alert alert-danger" style={{ margin: 16 }}>
+      <i className="las la-exclamation-circle" /> {error}
+      <button className="btn btn-sm btn-outline" style={{ marginLeft: 'auto' }} onClick={load}>Retry</button>
+    </div>
+  )
+
+  const o = data.overview
+  const revenue = Number(o.revenueCollected || 0)
+  const orderCount = o.orders?.total ?? 0
+  const aov = orderCount ? Math.round(revenue / orderCount) : 0
+  const tierTotal = TIER_ORDER.reduce((s, t) => s + (data.tiers[t] || 0), 0) || 1
+  const brandRevenue = groupBrandRevenue(data.ordersByBrand)
 
   return (
     <div className="anim-fade-in">
-      <PageHeader crumb={['Growth']} title="Reports & Analytics" subtitle="Performance insights for your operations">
-        <select className="form-control btn-sm" style={{ width: 'auto', padding: '9px 38px 9px 14px', borderRadius: 'var(--radius-pill)' }}>
-          <option>Last 12 months</option><option>Last 30 days</option><option>Last 7 days</option>
-        </select>
-        <button className="btn btn-primary btn-sm"><i className="las la-file-export" /> Export PDF</button>
+      <PageHeader crumb={['Growth']} title="Reports & Analytics" subtitle="Live performance insights across your operations">
+        <button className="btn btn-outline btn-sm" onClick={load}><i className="las la-sync" /> Refresh</button>
       </PageHeader>
 
       <div className="kpi-grid stagger">
-        <KPICard icon="las la-wallet" tone="green" label="Total Revenue" value={revenue} prefix="AED " trend="12.4%" spark={[30, 34, 32, 40, 44, 52, 68]} />
-        <KPICard icon="las la-receipt" tone="ink" label="Total Orders" value={orders} trend="8.1%" spark={[20, 26, 22, 30, 28, 36, 44]} />
-        <KPICard icon="las la-shopping-basket" tone="warn" label="Avg Order Value" value={aov} prefix="AED " trend="3.9%" spark={[70, 72, 74, 76, 78, 82, 85]} />
-        <KPICard icon="las la-redo-alt" tone="grape" label="Repeat Rate" value={64} suffix="%" trend="5.0%" spark={[55, 57, 58, 60, 61, 63, 64]} />
+        <Kpi icon="las la-wallet" tone="green" label="Revenue Collected" value={money(revenue)} />
+        <Kpi icon="las la-receipt" tone="ink" label="Total Orders" value={orderCount} sub={`${o.orders?.new ?? 0} new`} />
+        <Kpi icon="las la-shopping-basket" tone="warn" label="Avg Order Value" value={money(aov)} />
+        <Kpi icon="las la-users" tone="grape" label="Customers" value={o.users ?? 0} />
       </div>
 
-      <div className="dash-grid">
-        <div className="section-card">
-          <div className="section-head"><div><h3>Revenue vs Orders</h3><div className="sub">Trended over 12 months</div></div><span className="badge badge-success dot">Healthy growth</span></div>
-          <AreaChart labels={revenueSeries.labels} series={[
-            { name: 'Revenue (k)', color: '#84c168', data: revenueSeries.brand1 },
-            { name: 'Orders (×10)', color: '#3b82c4', data: revenueSeries.brand2 },
-          ]} />
-          <div className="chart-legend">
-            <span className="lg"><span className="sw" style={{ background: '#84c168' }} /> Revenue</span>
-            <span className="lg"><span className="sw" style={{ background: '#3b82c4' }} /> Orders</span>
-          </div>
-        </div>
-
-        <div className="section-card">
-          <div className="section-head"><div><h3>Sales by Channel</h3><div className="sub">Order distribution</div></div></div>
-          <div style={{ display: 'grid', placeItems: 'center', marginBottom: 12 }}>
-            <DonutChart segments={statusBreakdown} centerLabel="Orders" />
-          </div>
-        </div>
+      <div className="kpi-grid stagger" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <Kpi icon="las la-calendar-check" tone="info" label="Reservations" value={o.reservations?.total ?? 0} sub={`${o.reservations?.pending ?? 0} pending`} />
+        <Kpi icon="las la-concierge-bell" tone="grape" label="Open Catering Leads" value={o.cateringOpen ?? 0} />
       </div>
 
       <div className="dash-grid-2">
         <div className="section-card">
-          <div className="section-head"><div><h3>Top Selling Dishes</h3><div className="sub">By order volume</div></div></div>
-          {topCats.map((c) => (
-            <div className="progress-row" key={c.id}>
-              <div className="pr-head"><b>{c.emoji} {c.name}</b><span>{c.orders} orders · {money(c.price)}</span></div>
-              <div className="progress-track"><div className="progress-fill" style={{ width: `${(c.orders / maxCat) * 100}%` }} /></div>
-            </div>
-          ))}
-        </div>
-
-        <div className="section-card">
-          <div className="section-head"><div><h3>Branch Leaderboard</h3><div className="sub">Revenue ranking</div></div></div>
-          {[...myBranches].sort((a, b) => b.revenue - a.revenue).map((b, i) => (
-            <div className="rank-row" key={b.id}>
-              <span className="rk-num">{i + 1}</span>
-              <div className="rk-meta"><b>{b.name}</b><span>{b.orders} orders · {b.rating}★</span></div>
-              <span className="rk-val">{money(b.revenue, { compact: true })}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="dash-grid-2">
-        <div className="section-card">
-          <div className="section-head"><div><h3>Aggregator Clicks</h3><div className="sub">Tap-throughs to delivery platforms</div></div><span className="badge badge-neutral">{aggregators.reduce((s, a) => s + a.clicks, 0).toLocaleString()} total</span></div>
-          {(() => {
-            const tracked = aggregators.filter((a) => a.clicks > 0)
-            const maxClicks = Math.max(...tracked.map((a) => a.clicks), 1)
-            return tracked.sort((a, b) => b.clicks - a.clicks).map((a) => (
-              <div className="progress-row" key={a.name}>
-                <div className="pr-head"><b><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: a.color, marginRight: 7 }} />{a.name}</b><span>{a.clicks.toLocaleString()} clicks</span></div>
-                <div className="progress-track"><div className="progress-fill" style={{ width: `${(a.clicks / maxClicks) * 100}%` }} /></div>
+          <div className="section-head"><div><h3>Revenue by Brand</h3><div className="sub">From completed orders</div></div></div>
+          {brandRevenue.length ? brandRevenue.map((b) => {
+            const max = Math.max(...brandRevenue.map((x) => x.total), 1)
+            return (
+              <div className="progress-row" key={b.brand}>
+                <div className="pr-head"><b>{b.brand}</b><span>{money(b.total)} · {b.count} orders</span></div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${(b.total / max) * 100}%` }} /></div>
               </div>
-            ))
-          })()}
+            )
+          }) : <Empty text="No order data yet" />}
         </div>
 
         <div className="section-card">
-          <div className="section-head"><div><h3>Referral Records</h3><div className="sub">Member-get-member tracking</div></div></div>
+          <div className="section-head"><div><h3>Loyalty Tier Distribution</h3><div className="sub">Members per tier</div></div></div>
+          {TIER_ORDER.filter((t) => data.tiers[t] != null).map((t) => {
+            const n = data.tiers[t] || 0
+            return (
+              <div className="progress-row" key={t}>
+                <div className="pr-head"><b><span className={`badge ${tierBadge(t)}`} style={{ marginRight: 6 }}><i className="las la-medal" /> {t}</span></b><span>{n} member{n === 1 ? '' : 's'}</span></div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${(n / tierTotal) * 100}%` }} /></div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="dash-grid-2">
+        <div className="section-card">
+          <div className="section-head"><div><h3>Voucher Summary</h3><div className="sub">By program and status</div></div></div>
           <div className="table-scroll">
             <table className="data-table">
-              <thead><tr><th>Referrer</th><th>Referred</th><th>Date</th><th>Status</th><th>Points</th></tr></thead>
+              <thead><tr><th>Program</th><th>Status</th><th style={{ textAlign: 'right' }}>Count</th></tr></thead>
               <tbody>
-                {referralRecords.map((r) => (
-                  <tr key={r.id}>
-                    <td><b style={{ color: 'var(--ink)' }}>{r.referrer}</b><div className="text-muted" style={{ fontSize: 11 }}>{r.code}</div></td>
-                    <td>{r.referred}</td>
-                    <td>{new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</td>
-                    <td><span className={`badge ${refStatus[r.status]}`}>{r.status}</span></td>
-                    <td className="td-strong">{r.points ? `+${r.points}` : '—'}</td>
+                {data.vouchers.length ? data.vouchers.map((v, i) => (
+                  <tr key={i}>
+                    <td className="td-strong" style={{ textTransform: 'capitalize' }}>{v.kind}</td>
+                    <td><span className="badge badge-neutral" style={{ textTransform: 'capitalize' }}>{v.status}</span></td>
+                    <td style={{ textAlign: 'right' }} className="td-strong">{v.count}</td>
                   </tr>
-                ))}
+                )) : <tr><td colSpan={3}><Empty text="No vouchers yet" /></td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="section-head"><div><h3>Experience Bookings</h3><div className="sub">By experience</div></div></div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Experience</th><th>Status</th><th style={{ textAlign: 'right' }}>Count</th></tr></thead>
+              <tbody>
+                {data.offerBookings.length ? data.offerBookings.map((b, i) => (
+                  <tr key={i}>
+                    <td className="td-strong">{b.title || b.exp_key || '—'}</td>
+                    <td><span className="badge badge-neutral" style={{ textTransform: 'capitalize' }}>{(b.status || '').replace('_', ' ')}</span></td>
+                    <td style={{ textAlign: 'right' }} className="td-strong">{b.count}</td>
+                  </tr>
+                )) : <tr><td colSpan={3}><Empty text="No bookings yet" /></td></tr>}
               </tbody>
             </table>
           </div>
@@ -118,4 +135,29 @@ export default function Reports() {
       </div>
     </div>
   )
+}
+
+// orders-by-brand returns one row per (brand, status) — fold into per-brand totals.
+function groupBrandRevenue(rows) {
+  const map = {}
+  for (const r of rows) {
+    const m = (map[r.brand_key] ||= { brand: r.brand_key, total: 0, count: 0 })
+    m.total += Number(r.total || 0)
+    m.count += Number(r.count || 0)
+  }
+  return Object.values(map).sort((a, b) => b.total - a.total)
+}
+
+function Kpi({ icon, tone, label, value, sub }) {
+  return (
+    <div className="kpi-card">
+      <div className="kpi-top"><span className={`kpi-ic ${tone}`}><i className={icon} /></span></div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-label">{label}{sub ? <span className="text-muted"> · {sub}</span> : null}</div>
+    </div>
+  )
+}
+
+function Empty({ text }) {
+  return <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-tertiary)', fontSize: 13 }}>{text}</div>
 }

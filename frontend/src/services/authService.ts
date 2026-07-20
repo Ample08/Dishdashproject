@@ -51,6 +51,13 @@ export async function getProfile(): Promise<ApiUser> {
 }
 
 /**
+ * AsyncStorage key: set once the user taps "Skip for now" on registration, so
+ * the incomplete-profile redirect stops re-forcing Profile Setup on them. Kept
+ * here so Splash / OTP / Profile Setup / AuthContext all agree on the key.
+ */
+export const PROFILE_SKIPPED_KEY = '@dishdash/profile_skipped';
+
+/**
  * Whether the user has finished registration (Module 1 · 4.1 required fields):
  * a real name, an email, and a date of birth. Incomplete users are routed back
  * to Profile Setup after login instead of into the app.

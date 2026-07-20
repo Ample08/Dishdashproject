@@ -13,6 +13,8 @@ import {
   verifyOtp as apiVerifyOtp,
   updateProfile as apiUpdateProfile,
   getProfile as apiGetProfile,
+  isProfileComplete,
+  PROFILE_SKIPPED_KEY,
   type ApiUser,
   type ProfilePatch,
 } from '../services/authService';
@@ -37,6 +39,15 @@ type AuthValue = {
   /** Re-fetch the signed-in user's profile from the backend. */
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Registration finished (name + email + date of birth on file). Screens gate
+   * ordering / booking / loyalty on this — browsing stays open to everyone.
+   */
+  profileComplete: boolean;
+  /** The user tapped "Skip for now", so don't force Profile Setup on launch. */
+  profileSkipped: boolean;
+  /** Remember the skip so Splash / OTP stop re-routing into Profile Setup. */
+  markProfileSkipped: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -45,14 +56,16 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<ApiUser | null>(null);
+  const [profileSkipped, setProfileSkipped] = useState(false);
 
   // Restore a persisted session + hydrate the menu catalog on startup.
   useEffect(() => {
     (async () => {
       try {
-        const [savedToken, savedUser] = await Promise.all([
+        const [savedToken, savedUser, skipped] = await Promise.all([
           AsyncStorage.getItem(TOKEN_KEY),
           AsyncStorage.getItem(USER_KEY),
+          AsyncStorage.getItem(PROFILE_SKIPPED_KEY),
         ]);
         if (savedToken) {
           setAuthToken(savedToken);
@@ -61,6 +74,7 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
         if (savedUser) {
           setUser(JSON.parse(savedUser));
         }
+        setProfileSkipped(skipped === '1');
         // With a restored session, pull the latest profile so the Home
         // greeting / details reflect the server (name, email, points, etc.).
         if (savedToken) {
@@ -115,13 +129,22 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
     }
   }, []);
 
+  const markProfileSkipped = useCallback(async () => {
+    setProfileSkipped(true);
+    await AsyncStorage.setItem(PROFILE_SKIPPED_KEY, '1');
+  }, []);
+
   const signOut = useCallback(async () => {
     setAuthToken(null);
     setToken(null);
     setUser(null);
+    setProfileSkipped(false);
     await AsyncStorage.removeItem(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
+    await AsyncStorage.removeItem(PROFILE_SKIPPED_KEY);
   }, []);
+
+  const profileComplete = isProfileComplete(user);
 
   const value = useMemo<AuthValue>(
     () => ({
@@ -134,6 +157,9 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
       updateProfile,
       refreshProfile,
       signOut,
+      profileComplete,
+      profileSkipped,
+      markProfileSkipped,
     }),
     [
       ready,
@@ -144,6 +170,9 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
       updateProfile,
       refreshProfile,
       signOut,
+      profileComplete,
+      profileSkipped,
+      markProfileSkipped,
     ],
   );
 

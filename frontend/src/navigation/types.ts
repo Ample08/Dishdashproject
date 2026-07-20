@@ -1,7 +1,10 @@
 import type {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
 import type {CompositeScreenProps} from '@react-navigation/native';
 import type {NavigatorScreenParams} from '@react-navigation/native';
-import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import type {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from '@react-navigation/native-stack';
 
 import type {BrandKey} from '../data/menu';
 
@@ -19,7 +22,14 @@ export type RootStackParamList = {
   Handoff: {provider: Provider};
   PhoneVerify: {provider?: Provider} | undefined;
   OTP: {phone?: string; fromSso?: boolean; provider?: Provider} | undefined;
-  ProfileSetup: {sso?: boolean; prefill?: ProfilePrefill} | undefined;
+  /**
+   * `gated` marks an entry from an order / booking / loyalty gate rather than
+   * from onboarding — on save the user returns to whatever they were doing
+   * instead of being pushed through the Location / Notifications flow.
+   */
+  ProfileSetup:
+    | {sso?: boolean; prefill?: ProfilePrefill; gated?: boolean}
+    | undefined;
   Location: undefined;
   Notifications: undefined;
   WelcomeCelebration: undefined;
@@ -32,6 +42,7 @@ export type RootStackParamList = {
   Payment: undefined;
   OrderSuccess: undefined;
   OrderStatus: undefined;
+  MyOrders: undefined;
 
   // Reservation flow (40a → 45) + booking management (46)
   NewReservation: undefined;
@@ -74,6 +85,10 @@ export type TabParamList = {
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
+
+/** For `useNavigation()` outside a screen component (e.g. shared hooks). */
+export type RootStackNavigationProp =
+  NativeStackNavigationProp<RootStackParamList>;
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, T>,

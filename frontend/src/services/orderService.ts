@@ -37,6 +37,12 @@ function mapOrder(a: ApiOrder): ActiveOrder {
   };
 }
 
+/** GET /api/app/orders — my order history (paginated; newest first). */
+export async function fetchOrders(): Promise<ActiveOrder[]> {
+  const res = await api.get('/api/app/orders', {params: {limit: 50}});
+  return unwrap<ApiOrder[]>(res).map(mapOrder);
+}
+
 export async function createOrder(input: CreateOrderInput): Promise<ActiveOrder> {
   const res = await api.post('/api/app/orders', input);
   return mapOrder(unwrap<ApiOrder>(res));

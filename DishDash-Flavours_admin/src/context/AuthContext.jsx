@@ -1,90 +1,88 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { ROLES } from '../config/roles.js'
+import { roleMetaFor } from '../config/roles.js'
+import { tokenStore, setUnauthorizedHandler } from '../api/client.js'
+import * as authApi from '../api/auth.js'
 
 const AuthContext = createContext(null)
-const STORAGE_KEY = 'flavours_admin_auth'
 
-// Demo accounts — one per role in the hierarchy
-export const DEMO_USERS = {
-  super_admin: {
-    id: 1, name: 'Yash Dhakad', email: 'owner@flavours.ae',
-    role: 'super_admin', brandId: null, branchId: null,
-    scopeLabel: 'All Branches · System',
-  },
-  branch_admin: {
-    id: 3, name: 'Aarav Mehta', email: 'marina@flavours.ae',
-    role: 'branch_admin', brandId: 1, branchId: 1,
-    scopeLabel: 'Karaz Yas Mall',
-  },
-  staff: {
-    id: 4, name: 'Sara Khan', email: 'sara@flavours.ae',
-    role: 'staff', brandId: 1, branchId: 1,
-    scopeLabel: 'Karaz Yas Mall · Cashier',
-  },
-  catering_admin: {
-    id: 5, name: 'Um Abdallah', email: 'bait@flavours.ae',
-    role: 'catering_admin', brandId: null, branchId: null,
-    scopeLabel: 'Bait Um Abdallah · Catering',
-  },
+/* The API returns snake_case with permissions under `effectivePermissions`.
+   Normalise once here so no page has to know the wire format. */
+function normalizeAdmin(admin) {
+  return {
+    id: admin.id,
+    name: admin.name,
+    email: admin.email,
+    phone: admin.phone ?? null,
+    role: admin.role,
+    roleMeta: roleMetaFor(admin.role),
+    brandKey: admin.brand_key ?? null,
+    branchKey: admin.branch_key ?? null,
+    isActive: admin.is_active,
+    permissions: admin.effectivePermissions || [],
+    scopeLabel: scopeLabelFor(admin),
+  }
 }
 
-const DEMO_PASSWORD = '123456'
-const EMAIL_TO_ROLE = Object.fromEntries(
-  Object.values(DEMO_USERS).map((u) => [u.email, u.role]),
-)
-
-function withMeta(user) {
-  return { ...user, roleMeta: ROLES[user.role] }
+function scopeLabelFor(admin) {
+  const parts = [admin.brand_key, admin.branch_key].filter(Boolean)
+  return parts.length ? parts.join(' · ') : 'All Branches · System'
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // A 401 anywhere means the token is dead — drop the session.
+  // ProtectedRoute then bounces to /login on its own.
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      try {
-        setUser(withMeta(JSON.parse(saved)))
-      } catch {
-        localStorage.removeItem(STORAGE_KEY)
-      }
-    }
-    setLoading(false)
+    setUnauthorizedHandler(() => setUser(null))
+    return () => setUnauthorizedHandler(null)
   }, [])
 
-  const persist = (u) => {
-    const full = withMeta(u)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u))
-    setUser(full)
-    return full
-  }
+  // Restore the session on refresh: the token lives in localStorage, but the
+  // user is re-fetched so permissions are always the server's current answer.
+  useEffect(() => {
+    let cancelled = false
+
+    async function restore() {
+      if (!tokenStore.get()) {
+        setLoading(false)
+        return
+      }
+      try {
+        const { data } = await authApi.getProfile()
+        if (!cancelled) setUser(normalizeAdmin(data))
+      } catch {
+        tokenStore.clear() // expired or backend unreachable — start clean
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    restore()
+    return () => { cancelled = true }
+  }, [])
 
   const login = async (email, password) => {
-    const role = EMAIL_TO_ROLE[email?.trim().toLowerCase()]
-    if (role && password === DEMO_PASSWORD) {
-      persist(DEMO_USERS[role])
-      return { success: true, role }
+    try {
+      const { data } = await authApi.login(email, password)
+      tokenStore.set(data.token)
+      const nextUser = normalizeAdmin(data.admin)
+      setUser(nextUser)
+      return { success: true, user: nextUser }
+    } catch (error) {
+      tokenStore.clear()
+      return { success: false, message: error.apiMessage || 'Login failed.' }
     }
-    return { success: false, message: 'Invalid credentials. Try a demo role below.' }
-  }
-
-  const loginAs = (role) => {
-    if (DEMO_USERS[role]) persist(DEMO_USERS[role])
-  }
-
-  // Demo perspective switch (keeps you logged in, swaps the lens)
-  const switchRole = (role) => {
-    if (DEMO_USERS[role]) persist(DEMO_USERS[role])
   }
 
   const logout = () => {
-    localStorage.removeItem(STORAGE_KEY)
+    tokenStore.clear()
     setUser(null)
   }
 
   const value = useMemo(
-    () => ({ user, loading, login, loginAs, switchRole, logout, isAuthenticated: !!user }),
+    () => ({ user, loading, login, logout, isAuthenticated: !!user }),
     [user, loading],
   )
 

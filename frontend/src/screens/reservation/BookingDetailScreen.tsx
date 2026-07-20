@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Linking,
   Pressable,
@@ -15,8 +15,9 @@ import {BrandHeader, InfoRow} from '../../components/BookingSummary';
 import {ModifyBookingSheet} from '../../components/ModifyBookingSheet';
 import {PrimaryButton} from '../../components/PrimaryButton';
 import {ReservationHeader} from '../../components/ReservationHeader';
-import type {BookingStatus} from '../../data/reservations';
+import type {Booking, BookingStatus} from '../../data/reservations';
 import type {RootStackScreenProps} from '../../navigation/types';
+import {fetchBooking} from '../../services/reservationService';
 import {useReservations} from '../../state/ReservationContext';
 import {colors, fontFamily, radius} from '../../theme';
 
@@ -70,7 +71,23 @@ export function BookingDetailScreen({
 }: RootStackScreenProps<'BookingDetail'>) {
   const insets = useSafeAreaInsets();
   const {getBooking, cancelBooking, modifyBooking, resetDraft} = useReservations();
-  const booking = getBooking(route.params.bookingId);
+  // Instant render from context, then freshen from GET /api/app/bookings/{ref}.
+  const contextBooking = getBooking(route.params.bookingId);
+  const [fresh, setFresh] = useState<Booking | null>(null);
+  const booking = fresh ?? contextBooking;
+
+  useEffect(() => {
+    let alive = true;
+    fetchBooking(route.params.bookingId).then(b => {
+      if (alive && b) {
+        setFresh(b);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [route.params.bookingId]);
+
   const [modify, setModify] = useState(false);
   const [cancelSheet, setCancelSheet] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0].title);

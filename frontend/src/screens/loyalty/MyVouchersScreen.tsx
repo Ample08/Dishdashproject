@@ -17,6 +17,7 @@ import {VoucherCard} from '../../components/loyalty/Voucher';
 import {REDEEM_STEPS, loyaltyColors, type Voucher} from '../../data/loyalty';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useLoyalty} from '../../state/LoyaltyContext';
+import {useProfileGate} from '../../state/useProfileGate';
 import {colors, fontFamily} from '../../theme';
 
 type Tab = 'Active' | 'Used';
@@ -28,6 +29,7 @@ export function MyVouchersScreen({
 }: RootStackScreenProps<'MyVouchers'>) {
   const insets = useSafeAreaInsets();
   const {vouchers, redeemVoucher} = useLoyalty();
+  const requireProfile = useProfileGate();
   const [tab, setTab] = useState<Tab>('Active');
   const [redeemOpen, setRedeemOpen] = useState(false);
   const [redeemTarget, setRedeemTarget] = useState<Voucher | null>(null);
@@ -174,11 +176,13 @@ export function MyVouchersScreen({
 
             <Pressable
               style={styles.redeemPrimary}
-              onPress={() => {
-                redeemVoucher(redeemTarget.id);
-                setRedeemTarget(null);
-                setTab('Used');
-              }}
+              onPress={() =>
+                requireProfile(() => {
+                  redeemVoucher(redeemTarget.id);
+                  setRedeemTarget(null);
+                  setTab('Used');
+                }, 'Add your name, email and date of birth to redeem a voucher.')
+              }
               accessibilityRole="button">
               <Text style={styles.redeemPrimaryText}>Mark as redeemed</Text>
             </Pressable>

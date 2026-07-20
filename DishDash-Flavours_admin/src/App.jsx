@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import ProtectedRoute, { RequirePerm } from './components/ProtectedRoute.jsx'
+import ProtectedRoute, { RequirePerm, RequireRole } from './components/ProtectedRoute.jsx'
 import { useAuth } from './context/AuthContext.jsx'
-import { homePathForRole } from './config/roles.js'
+import { homePathFor } from './config/roles.js'
 import AdminLayout from './components/layout/AdminLayout.jsx'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -22,10 +22,10 @@ import Settings from './pages/Settings.jsx'
 
 const guarded = (perm, element) => <RequirePerm perm={perm}>{element}</RequirePerm>
 
-// Sends each role to the first page it's actually allowed to see
+// Sends each user to the first page their permissions actually allow
 function HomeRedirect() {
   const { user } = useAuth()
-  return <Navigate to={homePathForRole(user.role)} replace />
+  return <Navigate to={homePathFor(user)} replace />
 }
 
 export default function App() {
@@ -41,14 +41,20 @@ export default function App() {
         }
       >
         <Route index element={<HomeRedirect />} />
-        <Route path="dashboard" element={guarded('dashboard', <Dashboard />)} />
+        {/* Dashboard is open to every signed-in admin — the API has no permission for it. */}
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="orders" element={guarded('orders', <Orders />)} />
         <Route path="reservations" element={guarded('reservations', <Reservations />)} />
         <Route path="catering" element={guarded('catering', <Catering />)} />
         <Route path="menu" element={guarded('menu', <Menu />)} />
-        <Route path="customers" element={guarded('customers', <Customers />)} />
-        <Route path="brands" element={guarded('brands', <Brands />)} />
-        <Route path="branches" element={guarded('branches', <Branches />)} />
+        <Route path="customers" element={guarded('users', <Customers />)} />
+        {/* The API groups brands under the menu permission ("Menu & Brands"). */}
+        <Route path="brands" element={guarded('menu', <Brands />)} />
+        {/* No admin branches API yet — super admin only, still mock data. */}
+        <Route
+          path="branches"
+          element={<RequireRole roles={['super_admin']}><Branches /></RequireRole>}
+        />
         <Route path="staff" element={guarded('staff', <Staff />)} />
         <Route path="offers" element={guarded('offers', <Offers />)} />
         <Route path="vouchers" element={guarded('vouchers', <Vouchers />)} />

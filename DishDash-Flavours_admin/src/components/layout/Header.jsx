@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { ROLES, ROLE_ORDER, homePathForRole } from '../../config/roles.js'
 
 const NOTIFS = [
   { icon: 'las la-receipt', tone: 'kpi-ic green', text: 'New order #FD-2841 placed', time: '2 min ago' },
@@ -11,7 +10,7 @@ const NOTIFS = [
 ]
 
 export default function Header({ onMenuToggle }) {
-  const { user, logout, switchRole } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(null) // 'profile' | 'notif' | null
   const ref = useRef(null)
@@ -26,7 +25,6 @@ export default function Header({ onMenuToggle }) {
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const initials = user.name.split(' ').map((n) => n[0]).slice(0, 2).join('')
 
-  const handleSwitch = (role) => { switchRole(role); navigate(homePathForRole(role)) }
   const handleLogout = () => { logout(); navigate('/login') }
 
   return (
@@ -46,21 +44,6 @@ export default function Header({ onMenuToggle }) {
       </div>
 
       <div className="header-right">
-        {/* Role switcher — demo perspective */}
-        <div className="role-switch" title="Switch perspective (demo)">
-          {ROLE_ORDER.map((rk) => (
-            <button
-              key={rk}
-              className={user.role === rk ? 'active' : ''}
-              onClick={() => handleSwitch(rk)}
-              title={ROLES[rk].name}
-            >
-              <i className={ROLES[rk].icon} />
-              <span className="rs-text">{ROLES[rk].name.split(' ')[0]}</span>
-            </button>
-          ))}
-        </div>
-
         {/* Notifications */}
         <div className="dropdown">
           <button className="icon-btn" onClick={() => setOpen(open === 'notif' ? null : 'notif')} aria-label="Notifications">

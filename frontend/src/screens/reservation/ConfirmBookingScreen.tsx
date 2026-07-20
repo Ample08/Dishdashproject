@@ -14,6 +14,7 @@ import {ReservationHeader} from '../../components/ReservationHeader';
 import {branchByKey} from '../../data/reservations';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {seatingLabel, to12h, useReservations} from '../../state/ReservationContext';
+import {useProfileGate} from '../../state/useProfileGate';
 import {colors, fontFamily} from '../../theme';
 
 /**
@@ -25,12 +26,14 @@ export function ConfirmBookingScreen({
 }: RootStackScreenProps<'ConfirmBooking'>) {
   const insets = useSafeAreaInsets();
   const {createBooking, resetDraft} = useReservations();
+  const requireProfile = useProfileGate();
 
-  const confirm = () => {
-    const booking = createBooking();
-    resetDraft();
-    navigation.replace('ReservationSuccess', {bookingId: booking.id});
-  };
+  const confirm = () =>
+    requireProfile(() => {
+      const booking = createBooking();
+      resetDraft();
+      navigation.replace('ReservationSuccess', {bookingId: booking.id});
+    }, 'Add your name, email and date of birth to book a table.');
 
   return (
     <View style={styles.root}>

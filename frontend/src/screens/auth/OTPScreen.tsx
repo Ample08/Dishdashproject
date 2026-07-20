@@ -61,7 +61,7 @@ export function OTPScreen({navigation, route}: Props) {
   const [verifying, setVerifying] = useState(false);
   const [conflictOpen, setConflictOpen] = useState(false);
   const wasLocked = useRef(false);
-  const {verifyOtp, requestOtp} = useAuth();
+  const {verifyOtp, requestOtp, profileSkipped} = useAuth();
 
   const locked = lockIn > 0;
 
@@ -127,8 +127,11 @@ export function OTPScreen({navigation, route}: Props) {
 
       // New users, SSO sign-ups, and anyone whose registration is incomplete
       // (missing name / email / date of birth) go to Profile Setup; fully
-      // registered returning users jump straight into the app.
-      if (isNewUser || fromSso || !isProfileComplete(user)) {
+      // registered returning users jump straight into the app. Returning users
+      // who already chose "Skip for now" aren't forced back through it — the
+      // order / booking / loyalty gates pick them up instead.
+      const needsProfile = !isProfileComplete(user) && !profileSkipped;
+      if (isNewUser || fromSso || needsProfile) {
         navigation.reset({
           index: 0,
           routes: [{name: 'ProfileSetup', params: {sso: fromSso}}],

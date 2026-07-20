@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { APP_SHORT } from '../../config/app.js'
-import { navForRole } from '../../config/roles.js'
+import { navFor } from '../../config/roles.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { scopeOrders, ACTIVE_ORDER_STATUSES } from '../../data/db.js'
 
 export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth()
-  const nav = navForRole(user.role)
+  const nav = navFor(user)
   const pendingCount = scopeOrders(user).filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status)).length
 
   return (

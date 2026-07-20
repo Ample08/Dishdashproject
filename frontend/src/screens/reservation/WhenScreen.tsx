@@ -22,6 +22,7 @@ import {
 } from '../../data/reservations';
 import type {RootStackScreenProps} from '../../navigation/types';
 import {useReservations} from '../../state/ReservationContext';
+import {useProfileGate} from '../../state/useProfileGate';
 import {colors, fontFamily, radius} from '../../theme';
 import {ConfirmBookingReview} from './ConfirmBookingScreen';
 
@@ -54,6 +55,7 @@ const addDays = (d: Date, days: number) => {
 export function WhenScreen({navigation}: RootStackScreenProps<'ReservationWhen'>) {
   const insets = useSafeAreaInsets();
   const {patchDraft, createBooking, resetDraft} = useReservations();
+  const requireProfile = useProfileGate();
 
   const quickDays = useMemo(() => {
     const base = new Date();
@@ -90,13 +92,14 @@ export function WhenScreen({navigation}: RootStackScreenProps<'ReservationWhen'>
     setConfirmOpen(true);
   };
 
-  const confirmBooking = () => {
-    saveDraft();
-    const booking = createBooking();
-    resetDraft();
-    setConfirmOpen(false);
-    navigation.replace('ReservationSuccess', {bookingId: booking.id});
-  };
+  const confirmBooking = () =>
+    requireProfile(() => {
+      saveDraft();
+      const booking = createBooking();
+      resetDraft();
+      setConfirmOpen(false);
+      navigation.replace('ReservationSuccess', {bookingId: booking.id});
+    }, 'Add your name, email and date of birth to book a table.');
 
   return (
     <View style={styles.root}>

@@ -262,6 +262,17 @@ export function ProfileHomeScreen({navigation}: TabScreenProps<'Profile'>) {
 
             {!editing ? (
               <Pressable
+                style={styles.linkRow}
+                onPress={() => navigation.navigate('MyOrders')}
+                accessibilityRole="button">
+                <Icon name="receipt-outline" size={18} color={colors.brand.navy} />
+                <Text style={styles.linkText}>My Orders</Text>
+                <Icon name="chevron-forward" size={18} color={colors.text.tertiary} />
+              </Pressable>
+            ) : null}
+
+            {!editing ? (
+              <Pressable
                 style={styles.signOut}
                 onPress={doSignOut}
                 accessibilityRole="button">
@@ -479,12 +490,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.tertiary,
   },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 22,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.brand.white,
+  },
+  linkText: {
+    flex: 1,
+    fontFamily: fontFamily.bodyBold,
+    fontSize: 14,
+    color: colors.text.primary,
+  },
   signOut: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 22,
+    marginTop: 12,
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
